@@ -16,6 +16,7 @@ namespace SFRThelper.Models
         public string TargetId { get; set; }
         public string Oar1Id { get; set; }
         public string Oar2Id { get; set; }
+        public string BodyId { get; set; }
         public ImageGeometryDto Image { get; set; }
         public LatticeTransform Transform { get; set; }
         public string Message { get; set; }

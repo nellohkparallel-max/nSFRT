@@ -1,34 +1,43 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using SFRThelper.Models;
 using SFRThelper.Services;
 
 namespace SFRThelper.ViewModels
 {
     /// <summary>
-    /// CPU-only lattice generator. Phase 2 of the pipeline: zero VMS.TPS references.
-    /// Anchors (0,0,0) at the target center of mass and rejects centers outside V_valid.
+    /// CPU-only lattice generator. Phase 2: zero VMS.TPS references.
+    /// Anchors (0,0,0) at the target COM, applies planar yaw, and supports cubic / FCC / HCP.
     /// </summary>
     public class SphereOptimizer
     {
-        public const double DefaultCollisionEpsilonMm = 1e-4;
-
         public LatticePackingResult GenerateLattice(
             LatticeGeometryContext geometry,
             SFRTParameters parameters)
         {
-            return GenerateLattice(geometry, parameters, null, System.Threading.CancellationToken.None);
+            return GenerateLattice(geometry, parameters, null, CancellationToken.None, null);
         }
 
         public LatticePackingResult GenerateLattice(
             LatticeGeometryContext geometry,
             SFRTParameters parameters,
             IReadOnlyList<SphereModel> fixedSpheres,
-            System.Threading.CancellationToken token)
+            CancellationToken token)
+        {
+            return GenerateLattice(geometry, parameters, fixedSpheres, token, null);
+        }
+
+        public LatticePackingResult GenerateLattice(
+            LatticeGeometryContext geometry,
+            SFRTParameters parameters,
+            IReadOnlyList<SphereModel> fixedSpheres,
+            CancellationToken token,
+            IProgress<double> progress)
         {
             var result = new LatticePackingResult
             {
-                PackingMode = parameters.PackingMode,
+                PackingMode = parameters != null ? parameters.PackingMode : PackingGeometryMode.SimpleCubic,
                 AnchorCom = geometry != null ? geometry.CenterOfMass : default(Point3D)
             };
 
@@ -45,8 +54,10 @@ namespace SFRThelper.ViewModels
             }
 
             double radius = parameters.SphereRadiusMm;
-            double spacing = Math.Max(parameters.CenterSpacingMm, 2.0 * radius);
-            var hash = new SpatialHashGrid(spacing);
+            double dxy = Math.Max(parameters.EffectiveLateralSpacingMm, 2.0 * radius);
+            double dz = Math.Max(parameters.EffectiveSiSpacingMm, 2.0 * radius);
+            double minSpacing = Math.Min(dxy, dz);
+            var hash = new SpatialHashGrid(minSpacing);
             var occupied = new List<SphereModel>();
 
             if (fixedSpheres != null)
@@ -61,7 +72,7 @@ namespace SFRThelper.ViewModels
                 }
             }
 
-            IList<Point3D> candidates = BuildCandidateCenters(geometry, parameters, spacing);
+            IList<Point3D> candidates = BuildCandidateCenters(geometry, parameters, dxy, dz);
             result.CandidateCount = candidates.Count;
 
             int index = occupied.Count + 1;
@@ -70,6 +81,8 @@ namespace SFRThelper.ViewModels
             for (int i = 0; i < candidates.Count; i++)
             {
                 token.ThrowIfCancellationRequested();
+                if (progress != null && i % 64 == 0)
+                    progress.Report(candidates.Count == 0 ? 1 : (double)i / candidates.Count);
                 if (occupied.Count >= maxCount)
                     break;
 
@@ -80,7 +93,7 @@ namespace SFRThelper.ViewModels
                     continue;
                 }
 
-                if (hash.HasNeighborWithin(center, spacing))
+                if (hash.HasNeighborWithin(center, minSpacing))
                 {
                     result.RejectedCollision++;
                     continue;
@@ -91,13 +104,16 @@ namespace SFRThelper.ViewModels
                 index++;
             }
 
+            if (progress != null)
+                progress.Report(1.0);
+
             result.Spheres = occupied;
             result.PackingEfficiency = CalculatePackingEfficiency(occupied, radius, geometry.TargetBounds);
             result.Message = occupied.Count == 0
                 ? "No valid sphere placements found inside V_valid."
                 : "Packed " + occupied.Count + " spheres using COM-anchored "
-                  + (parameters.PackingMode == PackingGeometryMode.HexagonalClosePacking ? "HCP/FCC" : "simple cubic")
-                  + " lattice.";
+                  + PackingLabel(parameters.PackingMode)
+                  + " lattice (" + parameters.GridRotationDeg.ToString("F0") + "° yaw).";
             return result;
         }
 
@@ -136,34 +152,35 @@ namespace SFRThelper.ViewModels
         public IList<Point3D> BuildCandidateCenters(
             LatticeGeometryContext geometry,
             SFRTParameters parameters,
-            double spacing)
+            double dxy,
+            double dz)
         {
             var centers = new List<Point3D>();
             LatticeTransform transform = geometry.Transform;
             if (Math.Abs(transform.Rxx) + Math.Abs(transform.Ryy) + Math.Abs(transform.Rzz) < 1e-12)
-                transform = LatticeTransform.Identity(geometry.CenterOfMass);
+                transform = LatticeTransform.FromYawDegrees(geometry.CenterOfMass, parameters.GridRotationDeg);
 
             BoundingBox3D bounds = geometry.ValidVolume != null ? geometry.ValidVolume.Bounds : geometry.TargetBounds;
             if (bounds.IsEmpty)
                 bounds = geometry.TargetBounds;
 
-            double maxExtent = Math.Max(bounds.Diagonal, 1.0) + 2.0 * spacing;
-            int n = (int)Math.Ceiling(maxExtent / Math.Max(spacing * 0.5, 1.0)) + 2;
+            double minPitch = Math.Max(Math.Min(dxy, dz) * 0.5, 1.0);
+            double maxExtent = Math.Max(bounds.Diagonal, 1.0) + 2.0 * Math.Max(dxy, dz);
+            int n = (int)Math.Ceiling(maxExtent / minPitch) + 2;
             n = Math.Min(n, 80);
 
             if (parameters.PackingMode == PackingGeometryMode.SimpleCubic)
-                AppendSimpleCubic(centers, transform, bounds, spacing, n);
+                AppendSimpleCubic(centers, transform, bounds, dxy, dz, n);
+            else if (parameters.PackingMode == PackingGeometryMode.FaceCenteredCubic)
+                AppendFaceCenteredCubic(centers, transform, bounds, dxy, dz, n);
             else
-                AppendHexagonalClosePacking(centers, transform, bounds, spacing, n);
+                AppendHexagonalClosePacking(centers, transform, bounds, dxy, dz, n);
 
             return centers;
         }
 
-        /// <summary>
-        /// Simple cubic lattice: (i, j, k) * d, origin at COM.
-        /// </summary>
         public static void AppendSimpleCubic(
-            IList<Point3D> centers, LatticeTransform transform, BoundingBox3D bounds, double d, int n)
+            IList<Point3D> centers, LatticeTransform transform, BoundingBox3D bounds, double dxy, double dz, int n)
         {
             for (int k = -n; k <= n; k++)
             {
@@ -171,7 +188,7 @@ namespace SFRThelper.ViewModels
                 {
                     for (int i = -n; i <= n; i++)
                     {
-                        Point3D p = transform.ToPatient(i * d, j * d, k * d);
+                        Point3D p = transform.ToPatient(i * dxy, j * dxy, k * dz);
                         if (bounds.Contains(p))
                             centers.Add(p);
                     }
@@ -180,19 +197,37 @@ namespace SFRThelper.ViewModels
         }
 
         /// <summary>
-        /// HCP packing with uniform nearest-neighbor spacing d.
-        /// In-plane hexagonal rows plus ABAB layer offset so that interlayer neighbors are also distance d:
-        /// x = i*d + (j mod 2)*d/2 + (k mod 2)*d/2
-        /// y = j*(√3/2)*d + (k mod 2)*d*√3/6
-        /// z = k*√(2/3)*d
+        /// FCC: cubic lattice with even i+j+k on a grid of pitch d/√2 so nearest neighbors are distance d.
         /// </summary>
-        public static void AppendHexagonalClosePacking(
-            IList<Point3D> centers, LatticeTransform transform, BoundingBox3D bounds, double d, int n)
+        public static void AppendFaceCenteredCubic(
+            IList<Point3D> centers, LatticeTransform transform, BoundingBox3D bounds, double dxy, double dz, int n)
         {
-            double yPitch = d * Math.Sqrt(3.0) / 2.0;
-            double zPitch = d * Math.Sqrt(2.0 / 3.0);
-            double half = d * 0.5;
-            double layerY = d * Math.Sqrt(3.0) / 6.0;
+            double sxy = dxy / Math.Sqrt(2.0);
+            double sz = dz / Math.Sqrt(2.0);
+            int n3 = n * 2;
+            for (int k = -n3; k <= n3; k++)
+            {
+                for (int j = -n3; j <= n3; j++)
+                {
+                    for (int i = -n3; i <= n3; i++)
+                    {
+                        if (((i + j + k) & 1) != 0)
+                            continue;
+                        Point3D p = transform.ToPatient(i * sxy, j * sxy, k * sz);
+                        if (bounds.Contains(p))
+                            centers.Add(p);
+                    }
+                }
+            }
+        }
+
+        public static void AppendHexagonalClosePacking(
+            IList<Point3D> centers, LatticeTransform transform, BoundingBox3D bounds, double dxy, double dz, int n)
+        {
+            double yPitch = dxy * Math.Sqrt(3.0) / 2.0;
+            double zPitch = dz * Math.Sqrt(2.0 / 3.0);
+            double half = dxy * 0.5;
+            double layerY = dxy * Math.Sqrt(3.0) / 6.0;
 
             for (int k = -n; k <= n; k++)
             {
@@ -205,7 +240,7 @@ namespace SFRThelper.ViewModels
                     double z = k * zPitch;
                     for (int i = -n; i <= n; i++)
                     {
-                        Point3D p = transform.ToPatient(i * d + xOffset, y, z);
+                        Point3D p = transform.ToPatient(i * dxy + xOffset, y, z);
                         if (bounds.Contains(p))
                             centers.Add(p);
                     }
@@ -227,6 +262,21 @@ namespace SFRThelper.ViewModels
         public static Point3D SimpleCubicLatticePoint(int i, int j, int k, double d)
         {
             return new Point3D(i * d, j * d, k * d);
+        }
+
+        public static Point3D FaceCenteredCubicPoint(int i, int j, int k, double d)
+        {
+            double s = d / Math.Sqrt(2.0);
+            return new Point3D(i * s, j * s, k * s);
+        }
+
+        public static string PackingLabel(PackingGeometryMode mode)
+        {
+            if (mode == PackingGeometryMode.FaceCenteredCubic)
+                return "FCC";
+            if (mode == PackingGeometryMode.HexagonalClosePacking)
+                return "HCP";
+            return "simple cubic";
         }
 
         private static double CalculatePackingEfficiency(IList<SphereModel> spheres, double radius, BoundingBox3D bounds)

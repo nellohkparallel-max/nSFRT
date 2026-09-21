@@ -1,8 +1,10 @@
+using System;
+
 namespace SFRThelper.Models
 {
     /// <summary>
     /// Maps lattice-local coordinates into patient coordinates.
-    /// Origin is the target center of mass; R is a row-major 3x3 rotation (identity by default).
+    /// Origin is the target center of mass; R is a row-major 3x3 rotation.
     /// </summary>
     public struct LatticeTransform
     {
@@ -20,12 +22,21 @@ namespace SFRThelper.Models
 
         public static LatticeTransform Identity(Point3D origin)
         {
+            return FromYawDegrees(origin, 0);
+        }
+
+        /// <summary>Rotation about the patient Z (SI) axis to break MLC leaf alignment.</summary>
+        public static LatticeTransform FromYawDegrees(Point3D origin, double yawDegrees)
+        {
+            double rad = yawDegrees * Math.PI / 180.0;
+            double c = Math.Cos(rad);
+            double s = Math.Sin(rad);
             return new LatticeTransform
             {
                 Origin = origin,
-                Rxx = 1, Rxy = 0, Rxz = 0,
-                Ryx = 0, Ryy = 1, Ryz = 0,
-                Rzx = 0, Rzy = 0, Rzz = 1
+                Rxx = c, Rxy = -s, Rxz = 0,
+                Ryx = s, Ryy = c,  Ryz = 0,
+                Rzx = 0, Rzy = 0,  Rzz = 1
             };
         }
 

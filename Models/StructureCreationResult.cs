@@ -9,6 +9,8 @@ namespace SFRThelper.Models
         public List<string> CreatedStructureIds { get; set; }
         public string CompositePeaksId { get; set; }
         public string ValleyId { get; set; }
+        public string Ring01Id { get; set; }
+        public string Ring13Id { get; set; }
         public bool RolledBack { get; set; }
 
         public StructureCreationResult()

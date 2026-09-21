@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using SFRThelper.Helpers;
@@ -19,16 +20,23 @@ namespace SFRThelper.Geometry.Tests
         {
             Run("HCP nearest-neighbor spacing equals d", TestHcpNearestNeighbor);
             Run("Simple cubic nearest-neighbor spacing equals d", TestCubicNearestNeighbor);
+            Run("FCC nearest-neighbor spacing equals d", TestFccNearestNeighbor);
             Run("COM-anchored origin is lattice (0,0,0)", TestComAnchor);
+            Run("Yaw 45 deg rotates planar lattice about Z", TestYawRotation);
             Run("VoxelMask contains only occupied voxels", TestVoxelMask);
             Run("Spatial hash rejects sub-minimum distances in O(N)", TestSpatialHash);
             Run("Lattice generation stays inside V_valid", TestValidVolumeFilter);
             Run("Spacing validation requires d >= 2r", TestParameterValidation);
-            Run("TG-263 Peak ids and 16-character limit", TestStructureNaming);
+            Run("Directional SI spacing is independent of dxy", TestDirectionalSpacing);
+            Run("Miami / Mayo / Valencia / Mini-Lattice presets", TestProtocolPresets);
+            Run("TG-263 Peak ids, rings, and 16-character limit", TestStructureNaming);
             Run("Transaction rollback is sequential reverse order", TestTransactionRollback);
             Run("PVDR and volume-fraction flags", TestMetrics);
+            Run("gEUD from cumulative DVH bins", TestGeud);
             Run("Evaluation service assembles PVDR rows and alerts", TestEvaluationService);
+            Run("Coarse dose grid raises the 1.25 mm alert", TestDoseGridAlert);
             Run("Feasibility uses packed count and clearances", TestFeasibility);
+            Run("QA exporter writes CSV headers and PDF bytes", TestQaExport);
 
             Console.WriteLine();
             Console.WriteLine("Passed: " + _passed.ToString(CultureInfo.InvariantCulture)
@@ -94,6 +102,15 @@ namespace SFRThelper.Geometry.Tests
             AssertNear(origin.DistanceTo(SphereOptimizer.SimpleCubicLatticePoint(0, 0, 1, d)), d, 1e-9, "cubic z");
         }
 
+        private static void TestFccNearestNeighbor()
+        {
+            const double d = 20.0;
+            Point3D origin = SphereOptimizer.FaceCenteredCubicPoint(0, 0, 0, d);
+            AssertNear(origin.DistanceTo(SphereOptimizer.FaceCenteredCubicPoint(1, 1, 0, d)), d, 1e-9, "FCC xy");
+            AssertNear(origin.DistanceTo(SphereOptimizer.FaceCenteredCubicPoint(1, 0, 1, d)), d, 1e-9, "FCC xz");
+            AssertNear(origin.DistanceTo(SphereOptimizer.FaceCenteredCubicPoint(0, 1, 1, d)), d, 1e-9, "FCC yz");
+        }
+
         private static void TestComAnchor()
         {
             var com = new Point3D(10, -4, 27);
@@ -102,6 +119,16 @@ namespace SFRThelper.Geometry.Tests
             AssertNear(p.X, com.X, 1e-12, "COM X");
             AssertNear(p.Y, com.Y, 1e-12, "COM Y");
             AssertNear(p.Z, com.Z, 1e-12, "COM Z");
+        }
+
+        private static void TestYawRotation()
+        {
+            var origin = new Point3D(0, 0, 10);
+            var t = LatticeTransform.FromYawDegrees(origin, 45);
+            Point3D p = t.ToPatient(Math.Sqrt(2.0), 0, 0);
+            AssertNear(p.X, 1.0, 1e-9, "yaw X");
+            AssertNear(p.Y, 1.0, 1e-9, "yaw Y");
+            AssertNear(p.Z, 10.0, 1e-12, "yaw Z unchanged");
         }
 
         private static void TestVoxelMask()
@@ -182,6 +209,50 @@ namespace SFRThelper.Geometry.Tests
             AssertTrue(p.IsValid, "distinct OAR should be valid");
         }
 
+        private static void TestDirectionalSpacing()
+        {
+            var p = new SFRTParameters
+            {
+                SelectedTargetId = "GTV",
+                SphereDiameterMm = 10,
+                CenterSpacingMm = 20,
+                IsDirectionalSpacing = true,
+                LateralSpacingMm = 22,
+                SiSpacingMm = 25
+            };
+            AssertTrue(p.IsValid, "directional spacing >= 2r");
+            AssertNear(p.EffectiveLateralSpacingMm, 22, 1e-9, "dxy");
+            AssertNear(p.EffectiveSiSpacingMm, 25, 1e-9, "dz");
+            p.SiSpacingMm = 9;
+            AssertTrue(!p.IsValid, "SI pitch < 2r is invalid");
+        }
+
+        private static void TestProtocolPresets()
+        {
+            var p = new SFRTParameters { SelectedTargetId = "GTV" };
+            SFRTProtocolPresets.Apply(p, ClinicalProtocolPreset.UniversityOfMiami);
+            AssertNear(p.SphereDiameterMm, 15, 1e-9, "Miami D");
+            AssertNear(p.CenterSpacingMm, 30, 1e-9, "Miami spacing");
+            AssertNear(p.TargetInternalMarginMm, 10, 1e-9, "Miami margin");
+            AssertTrue(p.Preset == ClinicalProtocolPreset.UniversityOfMiami, "Miami preset id");
+
+            SFRTProtocolPresets.Apply(p, ClinicalProtocolPreset.MayoClinic);
+            AssertNear(p.SphereDiameterMm, 10, 1e-9, "Mayo D");
+            AssertNear(p.CenterSpacingMm, 25, 1e-9, "Mayo spacing");
+
+            SFRTProtocolPresets.Apply(p, ClinicalProtocolPreset.Valencia);
+            AssertNear(p.SphereDiameterMm, 10, 1e-9, "Valencia D");
+            AssertNear(p.CenterSpacingMm, 20, 1e-9, "Valencia spacing");
+            AssertNear(p.TargetInternalMarginMm, 5, 1e-9, "Valencia margin");
+
+            SFRTProtocolPresets.Apply(p, ClinicalProtocolPreset.MiniLattice);
+            AssertNear(p.SphereDiameterMm, 6, 1e-9, "Mini D");
+            AssertNear(p.CenterSpacingMm, 12, 1e-9, "Mini spacing");
+
+            p.SphereDiameterMm = 8;
+            AssertTrue(p.Preset == ClinicalProtocolPreset.Custom, "edit marks Custom");
+        }
+
         private static void TestStructureNaming()
         {
             AssertTrue(StructureNaming.FormatPeakId(1) == "Peak_01", "Peak_01");
@@ -190,6 +261,10 @@ namespace SFRThelper.Geometry.Tests
             AssertTrue(!StructureNaming.IsIndividualPeakId("Lattice_Peaks"), "composite is not individual");
             AssertTrue(StructureNaming.CompositePeaksId.Length <= StructureNaming.MaxIdLength, "Lattice_Peaks length");
             AssertTrue(StructureNaming.ValleyId.Length <= StructureNaming.MaxIdLength, "Lattice_Valley length");
+            AssertTrue(StructureNaming.Ring01Id == "Ring_SFRT_0-1cm", "ring 0-1");
+            AssertTrue(StructureNaming.Ring13Id == "Ring_SFRT_1-3cm", "ring 1-3");
+            AssertTrue(StructureNaming.Ring01Id.Length <= 16, "ring 0-1 length");
+            AssertTrue(StructureNaming.Ring13Id.Length <= 16, "ring 1-3 length");
             var existing = new HashSet<string> { "Lattice_Peaks" };
             string next = StructureNaming.NextAvailable("Lattice_Peaks", existing);
             AssertTrue(next != "Lattice_Peaks", "unique id");
@@ -218,6 +293,18 @@ namespace SFRThelper.Geometry.Tests
             AssertTrue(!SfrtMetricsCalculator.IsVolumeFractionOutOfRange(3.0), "VF ok");
         }
 
+        private static void TestGeud()
+        {
+            var bins = new List<DvhBin>
+            {
+                new DvhBin { DoseGy = 8.0, CumulativeVolume = 100 },
+                new DvhBin { DoseGy = 8.0, CumulativeVolume = 0 }
+            };
+            AssertNear(SfrtMetricsCalculator.Geud(bins, 1), 8.0, 1e-6, "gEUD a=1");
+            AssertNear(SfrtMetricsCalculator.Geud(bins, 2), 8.0, 1e-6, "gEUD a=2");
+            AssertNear(SfrtMetricsCalculator.Geud(bins, -10), 8.0, 1e-6, "gEUD a=-10");
+        }
+
         private static void TestEvaluationService()
         {
             var esapi = new FakeEsapi();
@@ -231,6 +318,19 @@ namespace SFRThelper.Geometry.Tests
             AssertTrue(result.MetricRows.Count > 0, "metric rows");
             AssertTrue(result.IndividualPeaks.Count == 2, "individual peaks");
             AssertTrue(!SfrtMetricsCalculator.IsPvdrLow(result.PvdrMean), "healthy PVDR");
+            AssertNear(result.TargetGeudAMinus10, 18.0, 1e-9, "target gEUD");
+            AssertNear(result.ValleyGeudA1, 5.0, 1e-9, "valley gEUD a=1");
+            AssertTrue(result.MetricRows.Any(r => r.Metric == "gEUD a=-10"), "gEUD row");
+        }
+
+        private static void TestDoseGridAlert()
+        {
+            var esapi = new FakeEsapi { DoseGridMm = 2.5, TotalMu = 12000 };
+            var svc = new SFRTEvaluationService(esapi);
+            SFRTEvaluationResult result = svc.Evaluate("PlanSetup|C1|SBRT", new SFRTParameters { SelectedTargetId = "GTV" });
+            AssertTrue(result.DoseGridCoarse, "coarse grid");
+            AssertTrue(result.Alerts.Any(a => a.IndexOf("1.25 mm", StringComparison.Ordinal) >= 0), "grid alert text");
+            AssertTrue(result.Overmodulated, "MU/Gy overmodulation");
         }
 
         private static void TestFeasibility()
@@ -257,8 +357,43 @@ namespace SFRThelper.Geometry.Tests
             AssertNear(s.VolumeFractionPercent, 8 * (4.0 / 3.0) * Math.PI * 125 / 1000.0 / 80.0 * 100.0, 1e-6, "fraction");
         }
 
+        private static void TestQaExport()
+        {
+            var result = new SFRTEvaluationResult
+            {
+                Success = true,
+                PvdrMean = 4,
+                VolumeFractionPercent = 3,
+                PlanDisplayName = "C1 / SBRT"
+            };
+            result.MetricRows.Add(new EvaluationMetricRow
+            {
+                Category = "PVDR",
+                Structure = "Lattice_Peaks",
+                Metric = "PVDR_mean",
+                Absolute = "4.00",
+                Relative = "OK",
+                Comment = "test"
+            });
+            string dir = Path.Combine(Path.GetTempPath(), "nsfrt-qa-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            string csvPath = Path.Combine(dir, "report.csv");
+            QaReportExporter.Export(result, new SFRTParameters { SelectedTargetId = "GTV" }, csvPath);
+            AssertTrue(File.Exists(csvPath), "csv exists");
+            AssertTrue(File.Exists(Path.Combine(dir, "report.pdf")), "pdf exists");
+            string csv = File.ReadAllText(csvPath);
+            AssertTrue(csv.Contains("PVDR_mean"), "csv metric");
+            AssertTrue(File.ReadAllBytes(Path.Combine(dir, "report.pdf")).Length > 20, "pdf bytes");
+        }
+
         private sealed class FakeEsapi : IESAPIService
         {
+            public double DoseGridMm { get; set; }
+            public double TotalMu { get; set; }
+            public bool IsStandalone { get { return false; } }
+            public IEsapiWorker Worker { get { return null; } }
+            public string SetupVmatArcs() { return "ok"; }
+            public string SeedPhotonObjectives(SFRTParameters parameters) { return "ok"; }
             public bool CanModifyStructureSet(out string reason) { reason = null; return true; }
             public StructureCreationResult CreateLatticeStructures(IReadOnlyList<SphereModel> spheres, SFRTParameters parameters, IProgress<string> progress, CancellationToken token) { throw new NotImplementedException(); }
             public LatticeGeometryContext ExtractLatticeGeometry(SFRTParameters parameters, IProgress<string> progress, CancellationToken token) { throw new NotImplementedException(); }
@@ -291,7 +426,8 @@ namespace SFRThelper.Geometry.Tests
                         D5Gy = 22,
                         D10Gy = 20,
                         D90Gy = 5,
-                        D95Gy = 4
+                        D95Gy = 4,
+                        GeudAMinus10 = 18
                     },
                     Peaks = new StructureDoseSnapshot
                     {
@@ -314,13 +450,19 @@ namespace SFRThelper.Geometry.Tests
                         DmeanGy = 5,
                         DminGy = 2,
                         D2Gy = 11,
-                        D10Gy = 8
+                        D10Gy = 8,
+                        GeudA1 = 5,
+                        GeudA2 = 6
                     },
                     IndividualPeaks =
                     {
                         new StructureDoseSnapshot { Id = "Peak_01", VolumeCc = 0.5, DmaxGy = 24, DmeanGy = 20, DminGy = 16, HasDose = true },
                         new StructureDoseSnapshot { Id = "Peak_02", VolumeCc = 0.5, DmaxGy = 23.5, DmeanGy = 19.5, DminGy = 15.5, HasDose = true }
-                    }
+                    },
+                    DoseGridXMm = DoseGridMm,
+                    DoseGridYMm = DoseGridMm,
+                    DoseGridZMm = DoseGridMm,
+                    TotalMu = TotalMu
                 };
             }
         }

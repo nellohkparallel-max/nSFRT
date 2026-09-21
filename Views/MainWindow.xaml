@@ -1,11 +1,13 @@
 <Window x:Class="SFRThelper.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="SFRT Lattice Helper  —  ESAPI 16.1"
-        Width="1360" Height="900"
-        MinWidth="1100" MinHeight="740">
+        xmlns:converters="clr-namespace:SFRThelper.Converters"
+        Title="nSFRT Lattice / SFRT Suite  —  Eclipse 16.1"
+        Width="1440" Height="940"
+        MinWidth="1180" MinHeight="760">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <converters:InverseBooleanConverter x:Key="InverseBool"/>
         <Style TargetType="TextBox">
             <Setter Property="Margin" Value="4"/>
             <Setter Property="Padding" Value="3,2"/>
@@ -28,6 +30,10 @@
             <Setter Property="Padding" Value="10,5"/>
             <Setter Property="MinHeight" Value="28"/>
         </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="Margin" Value="4"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
         <Style TargetType="DataGrid">
             <Setter Property="AutoGenerateColumns" Value="False"/>
             <Setter Property="IsReadOnly" Value="True"/>
@@ -36,6 +42,14 @@
             <Setter Property="GridLinesVisibility" Value="Horizontal"/>
             <Setter Property="RowHeaderWidth" Value="0"/>
         </Style>
+        <Style x:Key="Badge" TargetType="Border">
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#9AA4B2"/>
+            <Setter Property="Background" Value="#F4F7FB"/>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="10">
@@ -43,40 +57,46 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <DockPanel Grid.Row="0" Margin="0,0,0,8">
-            <TextBlock Text="Spatially Fractionated RT  /  Lattice Generator"
+            <TextBlock Text="Clinical Lattice / SFRT Planning Suite"
                        FontSize="18" FontWeight="Bold" VerticalAlignment="Center"/>
-            <TextBlock DockPanel.Dock="Right"
-                       Text="AAPM TG-263 Peak_xx  ·  Lattice_Peaks  ·  Lattice_Valley"
-                       VerticalAlignment="Center" Foreground="Gray" Margin="12,0,0,0"/>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="Protocol:" VerticalAlignment="Center" Margin="12,0,6,0"/>
+                <ComboBox Width="320"
+                          ItemsSource="{Binding ProtocolOptions}"
+                          DisplayMemberPath="Display"
+                          SelectedValuePath="Value"
+                          SelectedValue="{Binding SelectedPreset}"
+                          IsEnabled="{Binding IsIdle}"
+                          ToolTip="{Binding PresetDescription}"/>
+            </StackPanel>
         </DockPanel>
 
         <TabControl Grid.Row="1">
-            <!-- Geometry / generation -->
-            <TabItem Header="Geometry &amp; Lattice">
+            <!-- Tab 1: Geometry -->
+            <TabItem Header="Geometry Configuration">
                 <Grid Margin="6">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="430"/>
+                        <ColumnDefinition Width="460"/>
                         <ColumnDefinition Width="8"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
                     <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
-                            <GroupBox Header="Geometry configuration" Margin="0,0,0,8">
+                            <TextBlock Text="{Binding PresetDescription}" TextWrapping="Wrap"
+                                       Foreground="#445" Margin="4,0,4,8" FontStyle="Italic"/>
+
+                            <GroupBox Header="Target, OARs, and skin avoidance" Margin="0,0,0,8">
                                 <Grid Margin="4">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="168"/>
+                                        <ColumnDefinition Width="176"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
@@ -94,78 +114,131 @@
                                               SelectedValue="{Binding Parameters.SelectedTargetId}"
                                               IsEnabled="{Binding IsIdle}"/>
 
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="OAR Avoidance 1:" VerticalAlignment="Center" Margin="4"/>
-                                    <ComboBox Grid.Row="1" Grid.Column="1"
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Target margin (mm):" VerticalAlignment="Center" Margin="4"/>
+                                    <TextBox Grid.Row="1" Grid.Column="1"
+                                             Text="{Binding Parameters.TargetInternalMarginMm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                             IsEnabled="{Binding IsIdle}"/>
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="OAR Avoidance 1:" VerticalAlignment="Center" Margin="4"/>
+                                    <ComboBox Grid.Row="2" Grid.Column="1"
                                               ItemsSource="{Binding AvailableOARs}"
                                               DisplayMemberPath="DisplayName"
                                               SelectedValuePath="Id"
-                                              SelectedValue="{Binding Parameters.Oar1StructureId}"
+                                              SelectedValue="{Binding Parameters.AvoidanceOar1Id}"
                                               IsEnabled="{Binding IsIdle}"/>
 
-                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="OAR 1 clearance (mm):" VerticalAlignment="Center" Margin="4"/>
-                                    <TextBox Grid.Row="2" Grid.Column="1"
-                                             Text="{Binding Parameters.Oar1ClearanceMm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="OAR 1 clearance (mm):" VerticalAlignment="Center" Margin="4"/>
+                                    <TextBox Grid.Row="3" Grid.Column="1"
+                                             Text="{Binding Parameters.AvoidanceOar1ClearanceMm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
                                              IsEnabled="{Binding IsIdle}"/>
 
-                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="OAR Avoidance 2:" VerticalAlignment="Center" Margin="4"/>
-                                    <ComboBox Grid.Row="3" Grid.Column="1"
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="OAR Avoidance 2:" VerticalAlignment="Center" Margin="4"/>
+                                    <ComboBox Grid.Row="4" Grid.Column="1"
                                               ItemsSource="{Binding AvailableOARs}"
                                               DisplayMemberPath="DisplayName"
                                               SelectedValuePath="Id"
-                                              SelectedValue="{Binding Parameters.Oar2StructureId}"
+                                              SelectedValue="{Binding Parameters.AvoidanceOar2Id}"
                                               IsEnabled="{Binding IsIdle}"/>
 
-                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="OAR 2 clearance (mm):" VerticalAlignment="Center" Margin="4"/>
-                                    <TextBox Grid.Row="4" Grid.Column="1"
-                                             Text="{Binding Parameters.Oar2ClearanceMm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
-                                             IsEnabled="{Binding IsIdle}"/>
-
-                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Target clearance (mm):" VerticalAlignment="Center" Margin="4"/>
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="OAR 2 clearance (mm):" VerticalAlignment="Center" Margin="4"/>
                                     <TextBox Grid.Row="5" Grid.Column="1"
-                                             Text="{Binding Parameters.TargetClearanceMm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                             Text="{Binding Parameters.AvoidanceOar2ClearanceMm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
                                              IsEnabled="{Binding IsIdle}"/>
 
-                                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Sphere diameter (mm):" VerticalAlignment="Center" Margin="4"/>
+                                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Skin / EXTERNAL (mm):" VerticalAlignment="Center" Margin="4"/>
                                     <TextBox Grid.Row="6" Grid.Column="1"
+                                             Text="{Binding Parameters.ExternalBoundaryClearanceMm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                             IsEnabled="{Binding IsIdle}"/>
+                                </Grid>
+                            </GroupBox>
+
+                            <GroupBox Header="Sphere diameter, spacing, topology" Margin="0,0,0,8">
+                                <Grid Margin="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="176"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Sphere diameter (mm):" VerticalAlignment="Center" Margin="4"/>
+                                    <TextBox Grid.Row="0" Grid.Column="1"
                                              Text="{Binding Parameters.SphereDiameterMm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
                                              IsEnabled="{Binding IsIdle}"/>
 
-                                    <TextBlock Grid.Row="7" Grid.Column="0" Text="Center-to-center (mm):" VerticalAlignment="Center" Margin="4"/>
-                                    <TextBox Grid.Row="7" Grid.Column="1"
-                                             Text="{Binding Parameters.CenterSpacingMm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
-                                             IsEnabled="{Binding IsIdle}"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Spacing mode:" VerticalAlignment="Center" Margin="4"/>
+                                    <ComboBox Grid.Row="1" Grid.Column="1"
+                                              ItemsSource="{Binding SpacingModeOptions}"
+                                              DisplayMemberPath="Display"
+                                              SelectedValuePath="IsDirectional"
+                                              SelectedValue="{Binding SelectedDirectionalSpacing}"
+                                              IsEnabled="{Binding IsIdle}"/>
 
-                                    <TextBlock Grid.Row="8" Grid.Column="0" Text="Packing topology:" VerticalAlignment="Center" Margin="4"/>
-                                    <ComboBox Grid.Row="8" Grid.Column="1"
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Universal pitch (mm):" VerticalAlignment="Center" Margin="4"/>
+                                    <TextBox Grid.Row="2" Grid.Column="1"
+                                             Text="{Binding Parameters.CenterSpacingMm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                             IsEnabled="{Binding Parameters.IsUniversalSpacing}"/>
+
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Lateral dxy (mm):" VerticalAlignment="Center" Margin="4"/>
+                                    <TextBox Grid.Row="3" Grid.Column="1"
+                                             Text="{Binding Parameters.LateralSpacingMm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                             IsEnabled="{Binding Parameters.IsDirectionalSpacing}"/>
+
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="SI spacing dz (mm):" VerticalAlignment="Center" Margin="4"/>
+                                    <TextBox Grid.Row="4" Grid.Column="1"
+                                             Text="{Binding Parameters.SiSpacingMm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                             IsEnabled="{Binding Parameters.IsDirectionalSpacing}"/>
+
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Topology:" VerticalAlignment="Center" Margin="4"/>
+                                    <ComboBox Grid.Row="5" Grid.Column="1"
                                               ItemsSource="{Binding PackingOptions}"
                                               DisplayMemberPath="Display"
                                               SelectedValuePath="Value"
                                               SelectedValue="{Binding Parameters.PackingMode}"
                                               IsEnabled="{Binding IsIdle}"/>
 
-                                    <TextBlock Grid.Row="9" Grid.Column="0" Text="Sphere structures:" VerticalAlignment="Center" Margin="4"/>
-                                    <ComboBox Grid.Row="9" Grid.Column="1"
+                                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Grid rotation (°):" VerticalAlignment="Center" Margin="4"/>
+                                    <DockPanel Grid.Row="6" Grid.Column="1" Margin="4">
+                                        <TextBlock DockPanel.Dock="Right" Width="40" Text="{Binding Parameters.GridRotationDeg, StringFormat=F0}"
+                                                   VerticalAlignment="Center"/>
+                                        <Slider Minimum="0" Maximum="90" TickFrequency="5" IsSnapToTickEnabled="False"
+                                                Value="{Binding Parameters.GridRotationDeg, UpdateSourceTrigger=PropertyChanged}"
+                                                IsEnabled="{Binding IsIdle}"/>
+                                    </DockPanel>
+
+                                    <TextBlock Grid.Row="7" Grid.Column="0" Text="Sphere structures:" VerticalAlignment="Center" Margin="4"/>
+                                    <ComboBox Grid.Row="7" Grid.Column="1"
                                               ItemsSource="{Binding GenerationModeOptions}"
                                               DisplayMemberPath="Display"
                                               SelectedValuePath="Value"
                                               SelectedValue="{Binding Parameters.GenerationMode}"
                                               IsEnabled="{Binding IsIdle}"/>
 
-                                    <TextBlock Grid.Row="10" Grid.Column="0" Text="Max sphere count:" VerticalAlignment="Center" Margin="4"/>
-                                    <TextBox Grid.Row="10" Grid.Column="1"
+                                    <TextBlock Grid.Row="8" Grid.Column="0" Text="Max sphere count:" VerticalAlignment="Center" Margin="4"/>
+                                    <TextBox Grid.Row="8" Grid.Column="1"
                                              Text="{Binding Parameters.MaxSphereCount, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
                                              IsEnabled="{Binding IsIdle}"/>
                                 </Grid>
                             </GroupBox>
 
-                            <GroupBox Header="Pre-calculation feasibility" Margin="0,0,0,8">
+                            <GroupBox Header="Pre-calculation summary" Margin="0,0,0,8">
                                 <TextBox Text="{Binding FeasibilityText, Mode=OneWay}"
                                          IsReadOnly="True"
                                          TextWrapping="Wrap"
                                          AcceptsReturn="True"
                                          BorderThickness="0"
                                          Background="Transparent"
-                                         MinHeight="150"
+                                         MinHeight="140"
                                          FontFamily="Consolas"
                                          FontSize="12"
                                          Margin="4"/>
@@ -175,18 +248,21 @@
                                 <Button Content="Preview Lattice"
                                         Command="{Binding PreviewLatticeCommand}"
                                         IsEnabled="{Binding CanPreview}"/>
+                                <Button Content="Generate Spheres &amp; Rings"
+                                        Command="{Binding GenerateStructuresCommand}"
+                                        IsEnabled="{Binding CanGenerateSpheresAndRings}"
+                                        FontWeight="SemiBold"/>
                                 <Button Content="Regenerate Remaining"
                                         Command="{Binding RegenerateRemainingCommand}"
                                         IsEnabled="{Binding CanRegenerateRemaining}"/>
-                                <Button Content="Generate Structures"
-                                        Command="{Binding GenerateStructuresCommand}"
-                                        IsEnabled="{Binding CanCreateStructures}"/>
                                 <Button Content="Cancel"
                                         Command="{Binding CancelCommand}"
                                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
                             </WrapPanel>
+                            <ProgressBar Height="14" Margin="4,4,4,8" Minimum="0" Maximum="100"
+                                         Value="{Binding WorkProgress, Mode=OneWay}"/>
 
-                            <GroupBox Header="Generated peak centers" Margin="0,8,0,0" Height="220">
+                            <GroupBox Header="Generated peak centers" Margin="0,0,0,0" Height="200">
                                 <DataGrid ItemsSource="{Binding GeneratedSpheres}">
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="80"/>
@@ -223,14 +299,16 @@
                 </Grid>
             </TabItem>
 
-            <!-- Plan evaluation -->
-            <TabItem Header="Plan Evaluation">
+            <!-- Tab 2: Evaluation -->
+            <TabItem Header="Plan Evaluation &amp; Physics QA">
                 <Grid Margin="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
-                        <RowDefinition Height="220"/>
+                        <RowDefinition Height="160"/>
+                        <RowDefinition Height="140"/>
                     </Grid.RowDefinitions>
 
                     <Grid Grid.Row="0" Margin="0,0,0,8">
@@ -253,21 +331,33 @@
                                 IsEnabled="{Binding CanEvaluate}"/>
                     </Grid>
 
-                    <Border Grid.Row="1" Margin="0,0,0,8" Padding="8" CornerRadius="3"
+                    <WrapPanel Grid.Row="1" Margin="0,0,0,8">
+                        <Border Style="{StaticResource Badge}">
+                            <TextBlock Text="{Binding DoseGridBadge}"/>
+                        </Border>
+                        <Border Style="{StaticResource Badge}">
+                            <TextBlock Text="{Binding VolumeFractionBadge}"/>
+                        </Border>
+                        <Border Style="{StaticResource Badge}">
+                            <TextBlock Text="{Binding OvermodulationBadge}"/>
+                        </Border>
+                    </WrapPanel>
+
+                    <Border Grid.Row="2" Margin="0,0,0,8" Padding="8" CornerRadius="3"
                             BorderThickness="1"
                             Background="#FFF8E7" BorderBrush="#C9A227">
                         <DockPanel>
-                            <TextBlock DockPanel.Dock="Left" Text="Status:" FontWeight="Bold" Margin="0,0,8,0"/>
+                            <TextBlock DockPanel.Dock="Left" Text="QA:" FontWeight="Bold" Margin="0,0,8,0"/>
                             <TextBlock Text="{Binding EvaluationAlertText}" TextWrapping="Wrap"/>
                         </DockPanel>
                     </Border>
 
-                    <GroupBox Grid.Row="2" Header="Peak / valley / PVDR metrics" Margin="0,0,0,8">
+                    <GroupBox Grid.Row="3" Header="Peak vs valley dosimetry, PVDR, gEUD" Margin="0,0,0,8">
                         <DataGrid ItemsSource="{Binding EvaluationMetrics}">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="90"/>
                                 <DataGridTextColumn Header="Structure" Binding="{Binding Structure}" Width="160"/>
-                                <DataGridTextColumn Header="Metric" Binding="{Binding Metric}" Width="120"/>
+                                <DataGridTextColumn Header="Metric" Binding="{Binding Metric}" Width="130"/>
                                 <DataGridTextColumn Header="Absolute" Binding="{Binding Absolute}" Width="110"/>
                                 <DataGridTextColumn Header="Relative / flag" Binding="{Binding Relative}" Width="130"/>
                                 <DataGridTextColumn Header="Comment" Binding="{Binding Comment}" Width="*"/>
@@ -275,7 +365,7 @@
                         </DataGrid>
                     </GroupBox>
 
-                    <GroupBox Grid.Row="3" Header="Individual Peak_xx consistency">
+                    <GroupBox Grid.Row="4" Header="Inter-peak dose uniformity" Margin="0,0,0,8">
                         <DataGrid ItemsSource="{Binding IndividualPeakDoses}">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="100"/>
@@ -286,11 +376,74 @@
                             </DataGrid.Columns>
                         </DataGrid>
                     </GroupBox>
+
+                    <GroupBox Grid.Row="5" Header="Peak-to-valley spatial gradients">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="{Binding MeanGradientText}" Margin="4" FontWeight="SemiBold"/>
+                            <DataGrid ItemsSource="{Binding GradientRows}">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Peak A" Binding="{Binding PeakA}" Width="90"/>
+                                    <DataGridTextColumn Header="Peak B" Binding="{Binding PeakB}" Width="90"/>
+                                    <DataGridTextColumn Header="Sep (mm)" Binding="{Binding SeparationMm, StringFormat=F1}" Width="90"/>
+                                    <DataGridTextColumn Header="Trough (Gy)" Binding="{Binding TroughGy, StringFormat=F2}" Width="100"/>
+                                    <DataGridTextColumn Header="Peak (Gy)" Binding="{Binding PeakGy, StringFormat=F2}" Width="90"/>
+                                    <DataGridTextColumn Header="Gradient (Gy/mm)" Binding="{Binding GradientGyPerMm, StringFormat=F2}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </GroupBox>
                 </Grid>
+            </TabItem>
+
+            <!-- Tab 3: Automation -->
+            <TabItem Header="Automation &amp; QA Report">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12" MaxWidth="820" HorizontalAlignment="Left">
+                        <TextBlock Text="Photon Optimizer and VMAT helpers"
+                                   FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
+                        <TextBlock TextWrapping="Wrap" Margin="0,0,0,12"
+                                   Text="These routines run on the Eclipse STA thread. Seed PO after Lattice_Peaks / Lattice_Valley / Ring_SFRT_* exist. VMAT setup copies machine parameters from an existing treatment beam and adds two coplanar arcs (collimators 15° and 75°) with jaw tracking."/>
+
+                        <GroupBox Header="Plan automation" Margin="0,0,0,12">
+                            <StackPanel Margin="8">
+                                <WrapPanel>
+                                    <Button Content="Seed PO Objectives"
+                                            Command="{Binding SeedObjectivesCommand}"
+                                            IsEnabled="{Binding CanAutomate}"/>
+                                    <Button Content="Setup VMAT Arcs"
+                                            Command="{Binding SetupVmatArcsCommand}"
+                                            IsEnabled="{Binding CanAutomate}"/>
+                                </WrapPanel>
+                                <TextBlock TextWrapping="Wrap" Margin="4,8,4,0" Foreground="#445"
+                                           Text="Peaks: Lower 100% Rx (priority 100–120). Valley: Upper ≤30–33% Rx. Rings: steep upper falloff. NTO weight 40."/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="QA report" Margin="0,0,0,12">
+                            <StackPanel Margin="8">
+                                <TextBlock TextWrapping="Wrap" Margin="0,0,0,8"
+                                           Text="Exports a CSV metric table plus a companion PDF summary (PVDR, gEUD, volume fraction, dose-grid / MU guards, and alerts). Evaluate a calculated plan first."/>
+                                <Button Content="Export QA Report"
+                                        HorizontalAlignment="Left"
+                                        Command="{Binding ExportQaReportCommand}"
+                                        IsEnabled="{Binding CanExportQa}"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="Structure naming (TG-263 / 16-character Eclipse IDs)">
+                            <TextBlock Margin="8" FontFamily="Consolas" TextWrapping="Wrap"
+                                       Text="Peak_01 … Peak_nn&#x0a;Lattice_Peaks = ∪ Peak_i&#x0a;Lattice_Valley = Target \ Lattice_Peaks&#x0a;Ring_SFRT_0-1cm = (Target + 10 mm) \ Target&#x0a;Ring_SFRT_1-3cm = (Target + 30 mm) \ (Target + 10 mm)"/>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
 
-        <StatusBar Grid.Row="2">
+        <ProgressBar Grid.Row="2" Height="8" Margin="0,6,0,4" Minimum="0" Maximum="100"
+                     Value="{Binding WorkProgress, Mode=OneWay}"
+                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
+
+        <StatusBar Grid.Row="3">
             <StatusBarItem>
                 <TextBlock Text="{Binding StatusMessage}"/>
             </StatusBarItem>

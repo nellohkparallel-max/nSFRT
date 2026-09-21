@@ -1,20 +1,30 @@
 namespace SFRThelper.Models
 {
-    /// <summary>
-    /// Lattice packing topology used to place peak centers relative to the target COM.
-    /// </summary>
     public enum PackingGeometryMode
     {
         SimpleCubic = 0,
-        HexagonalClosePacking = 1
+        FaceCenteredCubic = 1,
+        HexagonalClosePacking = 2
     }
 
-    /// <summary>
-    /// Controls whether individual TG-263 Peak_xx structures are created in addition to the composite.
-    /// </summary>
     public enum SphereGenerationMode
     {
         IndividualAndComposite = 0,
         CompositeOnly = 1
+    }
+
+    public enum ClinicalProtocolPreset
+    {
+        Custom = 0,
+        UniversityOfMiami = 1,
+        MayoClinic = 2,
+        Valencia = 3,
+        MiniLattice = 4
+    }
+
+    public enum SpacingMode
+    {
+        Universal = 0,
+        Directional = 1
     }
 }

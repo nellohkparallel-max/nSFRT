@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Windows.Media;
+using SFRThelper.Helpers;
 using SFRThelper.Models;
 using VMS.TPS.Common.Model.API;
 using VMS.TPS.Common.Model.Types;
@@ -12,21 +13,73 @@ namespace SFRThelper.Services
     public class ESAPIService : IESAPIService
     {
         private readonly ScriptContext _context;
+        private readonly Application _application;
+        private Patient _standalonePatient;
+        private StructureSet _standaloneStructureSet;
+        private readonly IEsapiWorker _worker;
 
         public ESAPIService(ScriptContext context)
+            : this(context, new EsapiWorker(System.Windows.Threading.Dispatcher.CurrentDispatcher))
+        {
+        }
+
+        public ESAPIService(ScriptContext context, IEsapiWorker worker)
         {
             _context = context ?? throw new ArgumentNullException("context");
+            _worker = worker;
+        }
+
+        public ESAPIService(Application application, IEsapiWorker worker)
+        {
+            _application = application ?? throw new ArgumentNullException("application");
+            _worker = worker;
+        }
+
+        public bool IsStandalone
+        {
+            get { return _application != null; }
+        }
+
+        public IEsapiWorker Worker
+        {
+            get { return _worker; }
+        }
+
+        public void AttachStandalone(Patient patient, StructureSet structureSet)
+        {
+            _standalonePatient = patient;
+            _standaloneStructureSet = structureSet;
+        }
+
+        private Patient CurrentPatient
+        {
+            get { return _context != null ? _context.Patient : _standalonePatient; }
+        }
+
+        private StructureSet CurrentStructureSet
+        {
+            get { return _context != null ? _context.StructureSet : _standaloneStructureSet; }
+        }
+
+        private VMS.TPS.Common.Model.API.Image CurrentImage
+        {
+            get
+            {
+                if (_context != null)
+                    return _context.Image;
+                return _standaloneStructureSet != null ? _standaloneStructureSet.Image : null;
+            }
         }
 
         public string GetPatientStatus()
         {
             try
             {
-                if (_context.Patient == null)
+                if (CurrentPatient == null)
                     return "No patient loaded";
-                if (_context.StructureSet == null)
+                if (CurrentStructureSet == null)
                     return "No structure set loaded";
-                if (_context.Image == null)
+                if (CurrentImage == null)
                     return "No image loaded";
 
                 string reason;
@@ -46,12 +99,12 @@ namespace SFRThelper.Services
             error = null;
             try
             {
-                if (_context.Patient == null)
+                if (CurrentPatient == null)
                 {
                     error = "No patient is loaded.";
                     return false;
                 }
-                _context.Patient.BeginModifications();
+                CurrentPatient.BeginModifications();
                 return true;
             }
             catch (Exception ex)
@@ -64,12 +117,12 @@ namespace SFRThelper.Services
         public bool CanModifyStructureSet(out string reason)
         {
             reason = null;
-            if (_context.Patient == null)
+            if (CurrentPatient == null)
             {
                 reason = "No patient is loaded.";
                 return false;
             }
-            if (_context.StructureSet == null)
+            if (CurrentStructureSet == null)
             {
                 reason = "No structure set is loaded.";
                 return false;
@@ -77,10 +130,10 @@ namespace SFRThelper.Services
 
             try
             {
-                var ss = _context.StructureSet;
-                if (_context.Patient.Courses != null)
+                var ss = CurrentStructureSet;
+                if (CurrentPatient.Courses != null)
                 {
-                    foreach (var course in _context.Patient.Courses)
+                    foreach (var course in CurrentPatient.Courses)
                     {
                         if (course.PlanSetups == null)
                             continue;
@@ -111,10 +164,10 @@ namespace SFRThelper.Services
             var items = new List<StructureListItem>();
             try
             {
-                if (_context.StructureSet == null)
+                if (CurrentStructureSet == null)
                     return items;
 
-                foreach (var s in _context.StructureSet.Structures.Where(s => s != null && !s.IsEmpty))
+                foreach (var s in CurrentStructureSet.Structures.Where(s => s != null && !s.IsEmpty))
                     items.Add(ToListItem(s));
 
                 return items
@@ -134,10 +187,10 @@ namespace SFRThelper.Services
             var items = new List<StructureListItem> { StructureListItem.None() };
             try
             {
-                if (_context.StructureSet == null)
+                if (CurrentStructureSet == null)
                     return items;
 
-                foreach (var s in _context.StructureSet.Structures
+                foreach (var s in CurrentStructureSet.Structures
                     .Where(s => s != null && !s.IsEmpty)
                     .OrderBy(s => s.Id, StringComparer.OrdinalIgnoreCase))
                 {
@@ -156,10 +209,10 @@ namespace SFRThelper.Services
             var items = new List<PlanListItem>();
             try
             {
-                if (_context.Patient == null || _context.Patient.Courses == null)
+                if (CurrentPatient == null || CurrentPatient.Courses == null)
                     return items;
 
-                foreach (var course in _context.Patient.Courses)
+                foreach (var course in CurrentPatient.Courses)
                 {
                     if (course.PlanSetups != null)
                     {
@@ -230,7 +283,7 @@ namespace SFRThelper.Services
 
         public ImageGeometryDto GetImageGeometry()
         {
-            var image = _context.Image;
+            var image = CurrentImage;
             if (image == null)
                 return new ImageGeometryDto { XRes = 1, YRes = 1, ZRes = 1 };
 
@@ -252,7 +305,7 @@ namespace SFRThelper.Services
         {
             var result = new List<IReadOnlyList<Point3D>>();
             var structure = GetStructure(structureId);
-            if (structure == null || _context.Image == null)
+            if (structure == null || CurrentImage == null)
                 return result;
 
             try
@@ -327,7 +380,10 @@ namespace SFRThelper.Services
             context.TargetIsHighResolution = target.IsHighResolution;
             context.CenterOfMass = ToPoint(target.CenterPoint);
             context.TargetBounds = ToBounds(target);
-            context.Transform = LatticeTransform.Identity(context.CenterOfMass);
+            context.Transform = LatticeTransform.FromYawDegrees(context.CenterOfMass, parameters.GridRotationDeg);
+
+            Structure body = FindBodyStructure();
+            context.BodyId = body != null ? body.Id : null;
 
             string writeError;
             if (!TryEnsureWriteAccess(out writeError))
@@ -344,10 +400,18 @@ namespace SFRThelper.Services
 
                 bool highRes = target.IsHighResolution
                     || (oar1 != null && oar1.IsHighResolution)
-                    || (oar2 != null && oar2.IsHighResolution);
+                    || (oar2 != null && oar2.IsHighResolution)
+                    || (body != null && body.IsHighResolution);
 
                 Structure workTarget = EnsureWorkingCopy(target, "zzSFRTt", highRes, temps);
                 SegmentVolume contracted = workTarget.Margin(-parameters.TargetContractionMm);
+
+                if (body != null)
+                {
+                    Structure workBody = EnsureWorkingCopy(body, "zzSFRTb", highRes, temps);
+                    SegmentVolume skinSafe = workBody.Margin(-parameters.SkinContractionMm);
+                    contracted = contracted.And(skinSafe);
+                }
 
                 SegmentVolume exclusion = null;
                 if (oar1 != null)
@@ -366,7 +430,7 @@ namespace SFRThelper.Services
                 SegmentVolume valid = exclusion != null ? contracted.Sub(exclusion) : contracted;
 
                 string tempId = StructureNaming.NextAvailable(StructureNaming.TempValidId, ExistingIds());
-                Structure host = _context.StructureSet.AddStructure("CONTROL", tempId);
+                Structure host = CurrentStructureSet.AddStructure("CONTROL", tempId);
                 temps.Track(host.Id);
                 if (highRes && !host.IsHighResolution)
                     host.ConvertToHighResolution();
@@ -446,6 +510,18 @@ namespace SFRThelper.Services
             var transaction = new StructureTransaction();
             try
             {
+                if (!target.IsHighResolution)
+                {
+                    try
+                    {
+                        target.ConvertToHighResolution();
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine("ConvertToHighResolution: " + ex.Message);
+                    }
+                }
+
                 bool highRes = target.IsHighResolution;
                 var existing = ExistingIds();
                 bool createIndividuals = parameters.GenerationMode == SphereGenerationMode.IndividualAndComposite;
@@ -461,7 +537,7 @@ namespace SFRThelper.Services
                             ? StructureNaming.FormatPeakId(i + 1)
                             : spheres[i].Id;
                         string id = StructureNaming.NextAvailable(preferred, existing);
-                        Structure peak = _context.StructureSet.AddStructure("CONTROL", id);
+                        Structure peak = CurrentStructureSet.AddStructure("CONTROL", id);
                         transaction.Track(peak.Id);
                         existing.Add(peak.Id);
                         peak.Color = Colors.Gold;
@@ -475,7 +551,7 @@ namespace SFRThelper.Services
                 token.ThrowIfCancellationRequested();
                 Report(progress, "Creating composite Lattice_Peaks...");
                 string peaksId = StructureNaming.NextAvailable(StructureNaming.CompositePeaksId, existing);
-                Structure composite = _context.StructureSet.AddStructure("CONTROL", peaksId);
+                Structure composite = CurrentStructureSet.AddStructure("CONTROL", peaksId);
                 transaction.Track(composite.Id);
                 existing.Add(composite.Id);
                 composite.Color = Colors.OrangeRed;
@@ -500,7 +576,7 @@ namespace SFRThelper.Services
                 token.ThrowIfCancellationRequested();
                 Report(progress, "Creating Lattice_Valley = Target \\ Lattice_Peaks...");
                 string valleyId = StructureNaming.NextAvailable(StructureNaming.ValleyId, existing);
-                Structure valley = _context.StructureSet.AddStructure("CONTROL", valleyId);
+                Structure valley = CurrentStructureSet.AddStructure("CONTROL", valleyId);
                 transaction.Track(valley.Id);
                 valley.Color = Colors.DeepSkyBlue;
                 if (highRes && !valley.IsHighResolution)
@@ -509,14 +585,38 @@ namespace SFRThelper.Services
                 valley.SegmentVolume = target.SegmentVolume;
                 valley.SegmentVolume = valley.Sub(composite.SegmentVolume);
 
+                token.ThrowIfCancellationRequested();
+                Report(progress, "Creating Ring_SFRT_0-1cm and Ring_SFRT_1-3cm...");
+                string ring01Id = StructureNaming.NextAvailable(StructureNaming.Ring01Id, existing);
+                Structure ring01 = CurrentStructureSet.AddStructure("CONTROL", ring01Id);
+                transaction.Track(ring01.Id);
+                existing.Add(ring01.Id);
+                ring01.Color = Colors.LimeGreen;
+                if (highRes && !ring01.IsHighResolution)
+                    ring01.ConvertToHighResolution();
+                ring01.SegmentVolume = target.Margin(10.0);
+                ring01.SegmentVolume = ring01.Sub(target.SegmentVolume);
+
+                string ring13Id = StructureNaming.NextAvailable(StructureNaming.Ring13Id, existing);
+                Structure ring13 = CurrentStructureSet.AddStructure("CONTROL", ring13Id);
+                transaction.Track(ring13.Id);
+                ring13.Color = Colors.MediumSeaGreen;
+                if (highRes && !ring13.IsHighResolution)
+                    ring13.ConvertToHighResolution();
+                ring13.SegmentVolume = target.Margin(30.0);
+                ring13.SegmentVolume = ring13.Sub(target.Margin(10.0));
+
                 transaction.Commit();
                 result.Success = true;
                 result.CreatedStructureIds = new List<string>(transaction.CreatedIds);
                 result.CompositePeaksId = composite.Id;
                 result.ValleyId = valley.Id;
+                result.Ring01Id = ring01.Id;
+                result.Ring13Id = ring13.Id;
                 result.Message = createIndividuals
-                    ? "Created " + peakStructures.Count + " Peak structures, " + composite.Id + ", and " + valley.Id + "."
-                    : "Created composite " + composite.Id + " and " + valley.Id + ".";
+                    ? "Created " + peakStructures.Count + " Peak structures, " + composite.Id + ", " + valley.Id
+                      + ", " + ring01.Id + ", and " + ring13.Id + "."
+                    : "Created " + composite.Id + ", " + valley.Id + ", " + ring01.Id + ", and " + ring13.Id + ".";
                 return result;
             }
             catch (OperationCanceledException)
@@ -535,9 +635,264 @@ namespace SFRThelper.Services
             }
         }
 
+        public string SetupVmatArcs()
+        {
+            try
+            {
+                string writeError;
+                if (!TryEnsureWriteAccess(out writeError))
+                    return writeError;
+
+                ExternalPlanSetup plan = ResolveExternalPlan();
+                if (plan == null)
+                    return "No ExternalPlanSetup is in scope. Open a photon plan before seeding VMAT arcs.";
+
+                Beam template = null;
+                if (plan.Beams != null)
+                {
+                    foreach (var b in plan.Beams)
+                    {
+                        if (b != null && !b.IsSetupField)
+                        {
+                            template = b;
+                            break;
+                        }
+                    }
+                }
+                if (template == null)
+                    return "The plan has no existing treatment beam to copy machine parameters from.";
+
+                Structure target = CurrentStructureSet != null
+                    ? CurrentStructureSet.Structures.FirstOrDefault(s => s != null && !s.IsEmpty &&
+                        (s.DicomType == "GTV" || s.DicomType == "PTV" || s.Id.ToUpperInvariant().Contains("GTV")))
+                    : null;
+                VVector iso = template.IsocenterPosition;
+                if (target != null)
+                    iso = target.CenterPoint;
+
+                var machine = new ExternalBeamMachineParameters(
+                    template.TreatmentUnit.Id,
+                    template.EnergyModeDisplayName,
+                    (int)template.DoseRate,
+                    "ARC",
+                    null);
+
+                var weights = new List<double>(178);
+                for (int i = 0; i < 178; i++)
+                    weights.Add(1.0);
+
+                plan.AddVMATBeam(machine, weights, 15.0, 181.0, 179.0, GantryDirection.Clockwise, 0.0, iso);
+                plan.AddVMATBeam(machine, weights, 75.0, 179.0, 181.0, GantryDirection.CounterClockwise, 0.0, iso);
+                plan.OptimizationSetup.UseJawTracking = true;
+                return "Added 2 coplanar VMAT arcs (collimators 15° / 75°) and enabled jaw tracking.";
+            }
+            catch (Exception ex)
+            {
+                return "VMAT arc setup failed: " + ex.Message;
+            }
+        }
+
+        public string SeedPhotonObjectives(SFRTParameters parameters)
+        {
+            try
+            {
+                string writeError;
+                if (!TryEnsureWriteAccess(out writeError))
+                    return writeError;
+
+                ExternalPlanSetup plan = ResolveExternalPlan();
+                if (plan == null)
+                    return "No ExternalPlanSetup is in scope. Open a photon plan before seeding PO objectives.";
+
+                double rxGy = 0;
+                try { rxGy = ToGy(plan.TotalPrescribedDose); }
+                catch { rxGy = ToGy(plan.TotalDose); }
+                if (rxGy <= 0)
+                    return "Plan prescription dose is not set.";
+
+                Structure peaks = FindByIdOrPrefix(StructureNaming.CompositePeaksId, "Lattice_Pe");
+                Structure valley = FindByIdOrPrefix(StructureNaming.ValleyId, "Lattice_Va");
+                Structure ring01 = FindByIdOrPrefix(StructureNaming.Ring01Id, "Ring_SFRT_0");
+                Structure ring13 = FindByIdOrPrefix(StructureNaming.Ring13Id, "Ring_SFRT_1");
+                if (peaks == null || valley == null)
+                    return "Generate Lattice_Peaks and Lattice_Valley before seeding objectives.";
+
+                var opt = plan.OptimizationSetup;
+                opt.AddPointObjective(peaks, OptimizationObjectiveOperator.Lower, new DoseValue(rxGy, DoseValue.DoseUnit.Gy), 0, 120);
+                opt.AddPointObjective(peaks, OptimizationObjectiveOperator.Lower, new DoseValue(rxGy, DoseValue.DoseUnit.Gy), 95, 100);
+                opt.AddPointObjective(valley, OptimizationObjectiveOperator.Upper, new DoseValue(0.33 * rxGy, DoseValue.DoseUnit.Gy), 0, 90);
+                opt.AddPointObjective(valley, OptimizationObjectiveOperator.Upper, new DoseValue(0.30 * rxGy, DoseValue.DoseUnit.Gy), 50, 80);
+                if (ring01 != null)
+                    opt.AddPointObjective(ring01, OptimizationObjectiveOperator.Upper, new DoseValue(0.50 * rxGy, DoseValue.DoseUnit.Gy), 0, 70);
+                if (ring13 != null)
+                    opt.AddPointObjective(ring13, OptimizationObjectiveOperator.Upper, new DoseValue(0.30 * rxGy, DoseValue.DoseUnit.Gy), 0, 60);
+                opt.AddAutomaticNormalTissueObjective(40);
+                return "Seeded PO objectives on Lattice_Peaks (100% lower), Lattice_Valley (≤33% upper), and SFRT rings.";
+            }
+            catch (Exception ex)
+            {
+                return "PO objective seeding failed: " + ex.Message;
+            }
+        }
+
+        private ExternalPlanSetup ResolveExternalPlan()
+        {
+            if (_context != null && _context.ExternalPlanSetup != null)
+                return _context.ExternalPlanSetup;
+            if (CurrentPatient == null || CurrentStructureSet == null)
+                return null;
+            foreach (var course in CurrentPatient.Courses)
+            {
+                if (course.PlanSetups == null)
+                    continue;
+                foreach (var p in course.PlanSetups)
+                {
+                    var ext = p as ExternalPlanSetup;
+                    if (ext != null && SameStructureSet(ext.StructureSet))
+                        return ext;
+                }
+            }
+            return null;
+        }
+
+        private void FillDeliveryGuards(PlanningItem item, EvaluationDoseContext ctx)
+        {
+            try
+            {
+                if (item.Dose != null)
+                {
+                    ctx.DoseGridXMm = item.Dose.XRes;
+                    ctx.DoseGridYMm = item.Dose.YRes;
+                    ctx.DoseGridZMm = item.Dose.ZRes;
+                }
+            }
+            catch
+            {
+            }
+
+            var setup = item as PlanSetup;
+            if (setup == null || setup.Beams == null)
+                return;
+            double mu = 0;
+            foreach (var beam in setup.Beams)
+            {
+                if (beam == null || beam.IsSetupField)
+                    continue;
+                try { mu += beam.Meterset.Value; }
+                catch { }
+            }
+            ctx.TotalMu = mu;
+        }
+
+        private List<DoseGradientRow> SamplePeakPairGradients(PlanningItem item, List<StructureDoseSnapshot> peaks)
+        {
+            var rows = new List<DoseGradientRow>();
+            if (item == null || item.Dose == null || peaks == null || peaks.Count < 2)
+                return rows;
+
+            int limit = Math.Min(peaks.Count, 24);
+            for (int i = 0; i < limit; i++)
+            {
+                int best = -1;
+                double bestD = double.MaxValue;
+                for (int j = 0; j < limit; j++)
+                {
+                    if (i == j)
+                        continue;
+                    double d = peaks[i].Center.DistanceTo(peaks[j].Center);
+                    if (d < bestD && d > 0.5)
+                    {
+                        bestD = d;
+                        best = j;
+                    }
+                }
+                if (best < 0)
+                    continue;
+                if (string.Compare(peaks[i].Id, peaks[best].Id, StringComparison.Ordinal) > 0)
+                    continue;
+
+                DoseGradientRow row = SampleGradient(item, peaks[i], peaks[best]);
+                if (row != null)
+                    rows.Add(row);
+            }
+            return rows;
+        }
+
+        private DoseGradientRow SampleGradient(PlanningItem item, StructureDoseSnapshot a, StructureDoseSnapshot b)
+        {
+            try
+            {
+                int n = 25;
+                double minDose = double.MaxValue;
+                double maxDose = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    double t = i / (double)(n - 1);
+                    var p = new VVector(
+                        a.Center.X + (b.Center.X - a.Center.X) * t,
+                        a.Center.Y + (b.Center.Y - a.Center.Y) * t,
+                        a.Center.Z + (b.Center.Z - a.Center.Z) * t);
+                    double d = ToGy(item.Dose.GetDoseToPoint(p));
+                    if (double.IsNaN(d))
+                        continue;
+                    if (d < minDose) minDose = d;
+                    if (d > maxDose) maxDose = d;
+                }
+                double sep = a.Center.DistanceTo(b.Center);
+                if (sep < 1e-3 || minDose == double.MaxValue)
+                    return null;
+                return new DoseGradientRow
+                {
+                    PeakA = a.Id,
+                    PeakB = b.Id,
+                    SeparationMm = sep,
+                    TroughGy = minDose,
+                    PeakGy = maxDose,
+                    GradientGyPerMm = (maxDose - minDose) / (sep * 0.5)
+                };
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static List<DvhBin> BuildDvhBins(DVHData dvh)
+        {
+            var bins = new List<DvhBin>();
+            if (dvh == null || dvh.CurveData == null)
+                return bins;
+            foreach (var pt in dvh.CurveData)
+            {
+                bins.Add(new DvhBin
+                {
+                    DoseGy = ToGy(pt.DoseValue),
+                    CumulativeVolume = pt.Volume
+                });
+            }
+            return bins;
+        }
+
+        private Structure FindBodyStructure()
+        {
+            var ss = CurrentStructureSet;
+            if (ss == null)
+                return null;
+            Structure body = ss.Structures.FirstOrDefault(s => s != null && !s.IsEmpty && s.DicomType == "EXTERNAL");
+            if (body != null)
+                return body;
+            return ss.Structures.FirstOrDefault(s =>
+            {
+                if (s == null || s.IsEmpty)
+                    return false;
+                string id = (s.Id ?? string.Empty).ToUpperInvariant();
+                return id == "BODY" || id == "EXTERNAL" || id.Contains("BODY") || id.Contains("SKIN");
+            });
+        }
+
         public void RollbackCreatedStructures(IEnumerable<string> structureIds)
         {
-            if (structureIds == null || _context.StructureSet == null)
+            if (structureIds == null || CurrentStructureSet == null)
                 return;
             var transaction = new StructureTransaction();
             foreach (var id in structureIds)
@@ -563,7 +918,7 @@ namespace SFRThelper.Services
                 return ctx;
             }
 
-            var ss = _context.StructureSet;
+            var ss = CurrentStructureSet;
             Structure target = parameters != null ? GetStructure(parameters.SelectedTargetId) : null;
             Structure peaks = FindByIdOrPrefix(StructureNaming.CompositePeaksId, "Lattice_Pe");
             Structure valley = FindByIdOrPrefix(StructureNaming.ValleyId, "Lattice_Va");
@@ -577,6 +932,9 @@ namespace SFRThelper.Services
 
             foreach (var s in ss.Structures.Where(s => s != null && StructureNaming.IsIndividualPeakId(s.Id)))
                 ctx.IndividualPeaks.Add(Snapshot(item, s, planInfo.PrescriptionDoseGy));
+
+            FillDeliveryGuards(item, ctx);
+            ctx.Gradients = SamplePeakPairGradients(item, ctx.IndividualPeaks);
 
             if (parameters != null && parameters.HasOar1)
             {
@@ -634,6 +992,11 @@ namespace SFRThelper.Services
                     return snap;
 
                 snap.HasDose = true;
+                snap.Center = ToPoint(structure.CenterPoint);
+                snap.DvhBins = BuildDvhBins(dvhAbs);
+                snap.GeudAMinus10 = SfrtMetricsCalculator.Geud(snap.DvhBins, -10);
+                snap.GeudA1 = SfrtMetricsCalculator.Geud(snap.DvhBins, 1);
+                snap.GeudA2 = SfrtMetricsCalculator.Geud(snap.DvhBins, 2);
                 snap.DmaxGy = ToGy(dvhAbs.MaxDose);
                 snap.DmeanGy = ToGy(dvhAbs.MeanDose);
                 snap.DminGy = ToGy(dvhAbs.MinDose);
@@ -735,8 +1098,8 @@ namespace SFRThelper.Services
                 return VoxelMask.Empty();
 
             double imageMin = 1.0;
-            if (_context.Image != null)
-                imageMin = Math.Min(_context.Image.XRes, Math.Min(_context.Image.YRes, _context.Image.ZRes));
+            if (CurrentImage != null)
+                imageMin = Math.Min(CurrentImage.XRes, Math.Min(CurrentImage.YRes, CurrentImage.ZRes));
 
             double step = Math.Max(1.0, Math.Min(2.0, Math.Min(parameters.SphereRadiusMm * 0.5, imageMin)));
             const int maxDim = 192;
@@ -787,7 +1150,7 @@ namespace SFRThelper.Services
                 return source;
 
             string id = StructureNaming.NextAvailable(preferredId, ExistingIds());
-            Structure copy = _context.StructureSet.AddStructure("CONTROL", id);
+            Structure copy = CurrentStructureSet.AddStructure("CONTROL", id);
             temps.Track(copy.Id);
             copy.SegmentVolume = source.SegmentVolume;
             if (highRes && !copy.IsHighResolution)
@@ -802,7 +1165,7 @@ namespace SFRThelper.Services
 
         private void AddSphereContours(Structure structure, IReadOnlyList<SphereModel> spheres)
         {
-            var image = _context.Image;
+            var image = CurrentImage;
             if (image == null || structure == null || spheres == null || spheres.Count == 0)
                 return;
 
@@ -834,7 +1197,7 @@ namespace SFRThelper.Services
                 return contours;
 
             double circleRadius = Math.Sqrt(Math.Max(0, radius * radius - deltaZ * deltaZ));
-            if (circleRadius < 0.1)
+            if (circleRadius < 0.5)
                 return contours;
 
             double circumference = 2 * Math.PI * circleRadius;
@@ -858,15 +1221,15 @@ namespace SFRThelper.Services
 
         private void RollbackTransaction(StructureTransaction transaction)
         {
-            if (transaction == null || _context.StructureSet == null)
+            if (transaction == null || CurrentStructureSet == null)
                 return;
             foreach (var id in transaction.RollbackOrder())
             {
                 try
                 {
-                    Structure s = _context.StructureSet.Structures.FirstOrDefault(x => x.Id == id);
+                    Structure s = CurrentStructureSet.Structures.FirstOrDefault(x => x.Id == id);
                     if (s != null)
-                        _context.StructureSet.RemoveStructure(s);
+                        CurrentStructureSet.RemoveStructure(s);
                 }
                 catch (Exception ex)
                 {
@@ -878,19 +1241,19 @@ namespace SFRThelper.Services
 
         private HashSet<string> ExistingIds()
         {
-            return new HashSet<string>(_context.StructureSet.Structures.Select(s => s.Id), StringComparer.OrdinalIgnoreCase);
+            return new HashSet<string>(CurrentStructureSet.Structures.Select(s => s.Id), StringComparer.OrdinalIgnoreCase);
         }
 
         private Structure GetStructure(string id)
         {
-            if (string.IsNullOrEmpty(id) || _context.StructureSet == null)
+            if (string.IsNullOrEmpty(id) || CurrentStructureSet == null)
                 return null;
-            return _context.StructureSet.Structures.FirstOrDefault(s => s.Id == id);
+            return CurrentStructureSet.Structures.FirstOrDefault(s => s.Id == id);
         }
 
         private Structure FindByIdOrPrefix(string preferred, string prefix)
         {
-            var ss = _context.StructureSet;
+            var ss = CurrentStructureSet;
             if (ss == null)
                 return null;
             return ss.Structures.FirstOrDefault(s => s.Id == preferred)
@@ -901,7 +1264,7 @@ namespace SFRThelper.Services
         {
             item = null;
             info = GetEvaluablePlans().FirstOrDefault(p => p.Key == key);
-            if (info == null || _context.Patient == null)
+            if (info == null || CurrentPatient == null)
                 return false;
 
             // C# forbids capturing out/ref parameters in lambdas (CS1628).
@@ -909,7 +1272,7 @@ namespace SFRThelper.Services
             string planId = info.PlanId;
             bool isPlanSum = info.IsPlanSum;
 
-            foreach (var course in _context.Patient.Courses)
+            foreach (var course in CurrentPatient.Courses)
             {
                 if (!string.Equals(course.Id, courseId, StringComparison.OrdinalIgnoreCase))
                     continue;
@@ -925,17 +1288,17 @@ namespace SFRThelper.Services
 
         private bool SameStructureSet(StructureSet other)
         {
-            if (other == null || _context.StructureSet == null)
+            if (other == null || CurrentStructureSet == null)
                 return false;
-            if (ReferenceEquals(other, _context.StructureSet))
+            if (ReferenceEquals(other, CurrentStructureSet))
                 return true;
             try
             {
-                return other.UID == _context.StructureSet.UID;
+                return other.UID == CurrentStructureSet.UID;
             }
             catch
             {
-                return string.Equals(other.Id, _context.StructureSet.Id, StringComparison.OrdinalIgnoreCase);
+                return string.Equals(other.Id, CurrentStructureSet.Id, StringComparison.OrdinalIgnoreCase);
             }
         }
 

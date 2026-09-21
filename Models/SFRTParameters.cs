@@ -18,17 +18,29 @@ namespace SFRThelper.Models
         public const double VolumeFractionMaxPercent = 5.0;
         public const double PvdrWarningThreshold = 2.5;
 
+        public const double DefaultExternalClearanceMm = 5.0;
+        public const double DefaultGridRotationDeg = 45.0;
+        public const double DoseGridWarningMm = 1.25;
+        public const double OvermodulationMuPerGy = 400.0;
+
         private double _sphereRadiusMm = DefaultSphereRadiusMm;
         private double _centerSpacingMm = DefaultCenterSpacingMm;
+        private double _lateralSpacingMm = DefaultCenterSpacingMm;
+        private double _siSpacingMm = DefaultCenterSpacingMm;
         private double _targetClearanceMm = DefaultTargetClearanceMm;
         private double _oar1ClearanceMm = DefaultOarClearanceMm;
         private double _oar2ClearanceMm = DefaultOarClearanceMm;
+        private double _externalClearanceMm = DefaultExternalClearanceMm;
+        private double _gridRotationDeg = DefaultGridRotationDeg;
         private int _maxSphereCount = 500;
         private string _selectedTargetId;
         private string _oar1StructureId = StructureListItem.NoneId;
         private string _oar2StructureId = StructureListItem.NoneId;
         private PackingGeometryMode _packingMode = PackingGeometryMode.HexagonalClosePacking;
         private SphereGenerationMode _generationMode = SphereGenerationMode.IndividualAndComposite;
+        private ClinicalProtocolPreset _preset = ClinicalProtocolPreset.Custom;
+        private bool _isDirectionalSpacing;
+        private bool _applyingPreset;
         private readonly Dictionary<string, List<string>> _errors = new Dictionary<string, List<string>>();
 
         public double SphereRadiusMm
@@ -41,6 +53,7 @@ namespace SFRThelper.Models
                 _sphereRadiusMm = value;
                 OnPropertyChanged(nameof(SphereRadiusMm));
                 OnPropertyChanged(nameof(SphereDiameterMm));
+                MarkCustomIfEdited();
                 ValidateAll();
             }
         }
@@ -59,9 +72,82 @@ namespace SFRThelper.Models
                 if (NearlyEqual(_centerSpacingMm, value))
                     return;
                 _centerSpacingMm = value;
+                if (!_isDirectionalSpacing)
+                {
+                    _lateralSpacingMm = value;
+                    _siSpacingMm = value;
+                    OnPropertyChanged(nameof(LateralSpacingMm));
+                    OnPropertyChanged(nameof(SiSpacingMm));
+                }
                 OnPropertyChanged(nameof(CenterSpacingMm));
+                MarkCustomIfEdited();
                 ValidateAll();
             }
+        }
+
+        public bool IsDirectionalSpacing
+        {
+            get { return _isDirectionalSpacing; }
+            set
+            {
+                if (_isDirectionalSpacing == value)
+                    return;
+                _isDirectionalSpacing = value;
+                if (!value)
+                {
+                    _lateralSpacingMm = _centerSpacingMm;
+                    _siSpacingMm = _centerSpacingMm;
+                    OnPropertyChanged(nameof(LateralSpacingMm));
+                    OnPropertyChanged(nameof(SiSpacingMm));
+                }
+                OnPropertyChanged(nameof(IsDirectionalSpacing));
+                OnPropertyChanged(nameof(IsUniversalSpacing));
+                MarkCustomIfEdited();
+                ValidateAll();
+            }
+        }
+
+        public bool IsUniversalSpacing
+        {
+            get { return !_isDirectionalSpacing; }
+        }
+
+        public double LateralSpacingMm
+        {
+            get { return _lateralSpacingMm; }
+            set
+            {
+                if (NearlyEqual(_lateralSpacingMm, value))
+                    return;
+                _lateralSpacingMm = value;
+                OnPropertyChanged(nameof(LateralSpacingMm));
+                MarkCustomIfEdited();
+                ValidateAll();
+            }
+        }
+
+        public double SiSpacingMm
+        {
+            get { return _siSpacingMm; }
+            set
+            {
+                if (NearlyEqual(_siSpacingMm, value))
+                    return;
+                _siSpacingMm = value;
+                OnPropertyChanged(nameof(SiSpacingMm));
+                MarkCustomIfEdited();
+                ValidateAll();
+            }
+        }
+
+        public double EffectiveLateralSpacingMm
+        {
+            get { return _isDirectionalSpacing ? _lateralSpacingMm : _centerSpacingMm; }
+        }
+
+        public double EffectiveSiSpacingMm
+        {
+            get { return _isDirectionalSpacing ? _siSpacingMm : _centerSpacingMm; }
         }
 
         /// <summary>Target internal clearance M_target (mm). Combined with radius to contract V_valid.</summary>
@@ -74,8 +160,16 @@ namespace SFRThelper.Models
                     return;
                 _targetClearanceMm = value;
                 OnPropertyChanged(nameof(TargetClearanceMm));
+                OnPropertyChanged(nameof(TargetInternalMarginMm));
+                MarkCustomIfEdited();
                 ValidateAll();
             }
+        }
+
+        public double TargetInternalMarginMm
+        {
+            get { return TargetClearanceMm; }
+            set { TargetClearanceMm = value; }
         }
 
         /// <summary>Kept for compatibility with earlier builds; maps to <see cref="TargetClearanceMm"/>.</summary>
@@ -94,6 +188,7 @@ namespace SFRThelper.Models
                     return;
                 _oar1ClearanceMm = value;
                 OnPropertyChanged(nameof(Oar1ClearanceMm));
+                OnPropertyChanged(nameof(AvoidanceOar1ClearanceMm));
                 ValidateAll();
             }
         }
@@ -107,6 +202,7 @@ namespace SFRThelper.Models
                     return;
                 _oar2ClearanceMm = value;
                 OnPropertyChanged(nameof(Oar2ClearanceMm));
+                OnPropertyChanged(nameof(AvoidanceOar2ClearanceMm));
                 ValidateAll();
             }
         }
@@ -140,6 +236,7 @@ namespace SFRThelper.Models
                     return;
                 _oar1StructureId = value ?? StructureListItem.NoneId;
                 OnPropertyChanged(nameof(Oar1StructureId));
+                OnPropertyChanged(nameof(AvoidanceOar1Id));
                 ValidateAll();
             }
         }
@@ -153,6 +250,7 @@ namespace SFRThelper.Models
                     return;
                 _oar2StructureId = value ?? StructureListItem.NoneId;
                 OnPropertyChanged(nameof(Oar2StructureId));
+                OnPropertyChanged(nameof(AvoidanceOar2Id));
                 ValidateAll();
             }
         }
@@ -166,6 +264,7 @@ namespace SFRThelper.Models
                     return;
                 _packingMode = value;
                 OnPropertyChanged(nameof(PackingMode));
+                MarkCustomIfEdited();
             }
         }
 
@@ -231,9 +330,96 @@ namespace SFRThelper.Models
             get { return Oar2ClearanceMm + SphereRadiusMm; }
         }
 
+        public double ExternalBoundaryClearanceMm
+        {
+            get { return _externalClearanceMm; }
+            set
+            {
+                if (NearlyEqual(_externalClearanceMm, value))
+                    return;
+                _externalClearanceMm = value;
+                OnPropertyChanged(nameof(ExternalBoundaryClearanceMm));
+                ValidateAll();
+            }
+        }
+
+        public double SkinContractionMm
+        {
+            get { return SphereRadiusMm + ExternalBoundaryClearanceMm; }
+        }
+
+        public double GridRotationDeg
+        {
+            get { return _gridRotationDeg; }
+            set
+            {
+                double clamped = value;
+                if (clamped < 0) clamped = 0;
+                if (clamped > 90) clamped = 90;
+                if (NearlyEqual(_gridRotationDeg, clamped))
+                    return;
+                _gridRotationDeg = clamped;
+                OnPropertyChanged(nameof(GridRotationDeg));
+                MarkCustomIfEdited();
+            }
+        }
+
+        public ClinicalProtocolPreset Preset
+        {
+            get { return _preset; }
+            set
+            {
+                if (_preset == value)
+                    return;
+                _preset = value;
+                OnPropertyChanged(nameof(Preset));
+            }
+        }
+
+        public string AvoidanceOar1Id
+        {
+            get { return Oar1StructureId; }
+            set { Oar1StructureId = value; }
+        }
+
+        public string AvoidanceOar2Id
+        {
+            get { return Oar2StructureId; }
+            set { Oar2StructureId = value; }
+        }
+
+        public double AvoidanceOar1ClearanceMm
+        {
+            get { return Oar1ClearanceMm; }
+            set { Oar1ClearanceMm = value; }
+        }
+
+        public double AvoidanceOar2ClearanceMm
+        {
+            get { return Oar2ClearanceMm; }
+            set { Oar2ClearanceMm = value; }
+        }
+
+        public void BeginPresetApply()
+        {
+            _applyingPreset = true;
+        }
+
+        public void EndPresetApply()
+        {
+            _applyingPreset = false;
+            ValidateAll();
+            OnPropertyChanged(nameof(Preset));
+        }
+
         public double EdgeToEdgeClearanceMm
         {
-            get { return CenterSpacingMm - 2.0 * SphereRadiusMm; }
+            get { return EffectiveLateralSpacingMm - 2.0 * SphereRadiusMm; }
+        }
+
+        public double EdgeToEdgeSiClearanceMm
+        {
+            get { return EffectiveSiSpacingMm - 2.0 * SphereRadiusMm; }
         }
 
         public bool IsValid
@@ -314,9 +500,13 @@ namespace SFRThelper.Models
             ValidateProperty(nameof(SphereRadiusMm), ValidateRadius);
             ValidateProperty(nameof(SphereDiameterMm), ValidateRadius);
             ValidateProperty(nameof(CenterSpacingMm), ValidateSpacing);
+            ValidateProperty(nameof(LateralSpacingMm), ValidateSpacing);
+            ValidateProperty(nameof(SiSpacingMm), ValidateSpacing);
             ValidateProperty(nameof(TargetClearanceMm), () => ValidateNonNegative(TargetClearanceMm, "Target clearance"));
+            ValidateProperty(nameof(ExternalBoundaryClearanceMm), () => ValidateNonNegative(ExternalBoundaryClearanceMm, "External/skin clearance"));
             ValidateProperty(nameof(Oar1ClearanceMm), () => ValidateNonNegative(Oar1ClearanceMm, "OAR 1 clearance"));
             ValidateProperty(nameof(Oar2ClearanceMm), () => ValidateNonNegative(Oar2ClearanceMm, "OAR 2 clearance"));
+            ValidateProperty(nameof(GridRotationDeg), ValidateRotation);
             ValidateProperty(nameof(MaxSphereCount), ValidateMaxCount);
             ValidateProperty(nameof(Oar1StructureId), ValidateOars);
             ValidateProperty(nameof(Oar2StructureId), ValidateOars);
@@ -339,15 +529,40 @@ namespace SFRThelper.Models
         private List<string> ValidateSpacing()
         {
             var errors = new List<string>();
-            if (double.IsNaN(CenterSpacingMm) || CenterSpacingMm <= 0)
+            double dxy = EffectiveLateralSpacingMm;
+            double dz = EffectiveSiSpacingMm;
+            double min = 2.0 * SphereRadiusMm;
+            if (double.IsNaN(dxy) || dxy <= 0 || double.IsNaN(dz) || dz <= 0)
                 errors.Add("Center-to-center distance must be greater than 0 mm.");
-            if (CenterSpacingMm < 2.0 * SphereRadiusMm - 1e-6)
+            if (dxy < min - 1e-6)
             {
                 errors.Add(string.Format(CultureInfo.InvariantCulture,
-                    "Center-to-center distance must be ≥ 2 × radius ({0:F1} mm).",
-                    2.0 * SphereRadiusMm));
+                    "Lateral spacing must be ≥ 2 × radius ({0:F1} mm).", min));
+            }
+            if (dz < min - 1e-6)
+            {
+                errors.Add(string.Format(CultureInfo.InvariantCulture,
+                    "SI spacing must be ≥ 2 × radius ({0:F1} mm).", min));
             }
             return errors.Count == 0 ? null : errors;
+        }
+
+        private List<string> ValidateRotation()
+        {
+            if (double.IsNaN(GridRotationDeg) || GridRotationDeg < 0 || GridRotationDeg > 90)
+                return new List<string> { "Grid rotation must be between 0° and 90°." };
+            return null;
+        }
+
+        private void MarkCustomIfEdited()
+        {
+            if (_applyingPreset)
+                return;
+            if (_preset != ClinicalProtocolPreset.Custom)
+            {
+                _preset = ClinicalProtocolPreset.Custom;
+                OnPropertyChanged(nameof(Preset));
+            }
         }
 
         private List<string> ValidateNonNegative(double value, string label)

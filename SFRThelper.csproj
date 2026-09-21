@@ -58,6 +58,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Converters\InverseBooleanConverter.cs" />
     <Compile Include="Helpers\SfrtMetricsCalculator.cs" />
     <Compile Include="Models\BoundingBox3D.cs" />
     <Compile Include="Models\Enums.cs" />
@@ -70,6 +71,7 @@
     <Compile Include="Models\Point3D.cs" />
     <Compile Include="Models\SFRTEvaluationResult.cs" />
     <Compile Include="Models\SFRTParameters.cs" />
+    <Compile Include="Models\SFRTProtocolPresets.cs" />
     <Compile Include="Models\SphereModel.cs" />
     <Compile Include="Models\StructureCreationResult.cs" />
     <Compile Include="Models\StructureListItem.cs" />
@@ -77,7 +79,10 @@
     <Compile Include="Models\VoxelMask.cs" />
     <Compile Include="Script.cs" />
     <Compile Include="Services\ESAPIService.cs" />
+    <Compile Include="Services\EsapiWorker.cs" />
     <Compile Include="Services\IESAPIService.cs" />
+    <Compile Include="Services\PlanAutomationService.cs" />
+    <Compile Include="Services\QaReportExporter.cs" />
     <Compile Include="Services\SFRTEvaluationService.cs" />
     <Compile Include="Services\SpatialHashGrid.cs" />
     <Compile Include="Services\StructureTransaction.cs" />

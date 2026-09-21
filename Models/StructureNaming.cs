@@ -13,6 +13,8 @@ namespace SFRThelper.Models
         public const int MaxIdLength = 16;
         public const string CompositePeaksId = "Lattice_Peaks";
         public const string ValleyId = "Lattice_Valley";
+        public const string Ring01Id = "Ring_SFRT_0-1cm";
+        public const string Ring13Id = "Ring_SFRT_1-3cm";
         public const string TempValidId = "zzSFRTtmp";
 
         private static readonly Regex PeakRegex = new Regex(@"^Peak_\d+$", RegexOptions.IgnoreCase | RegexOptions.Compiled);

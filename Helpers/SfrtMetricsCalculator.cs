@@ -72,14 +72,18 @@ namespace SFRThelper.Helpers
             summary.ValidVolumeCc = validCc;
             summary.VolumeFractionPercent = fraction;
             summary.EdgeToEdgeClearanceMm = parameters.EdgeToEdgeClearanceMm;
+            summary.EdgeToEdgeSiClearanceMm = parameters.EdgeToEdgeSiClearanceMm;
             summary.TargetClearanceMm = parameters.TargetClearanceMm;
+            summary.ExternalClearanceMm = parameters.ExternalBoundaryClearanceMm;
+            summary.BodyId = geometry != null ? geometry.BodyId : null;
             summary.Oar1ClearanceMm = parameters.Oar1ClearanceMm;
             summary.Oar2ClearanceMm = parameters.Oar2ClearanceMm;
             summary.Oar1Id = parameters.HasOar1 ? parameters.Oar1StructureId : null;
             summary.Oar2Id = parameters.HasOar2 ? parameters.Oar2StructureId : null;
             summary.PackingMode = parameters.PackingMode;
             summary.VolumeFractionOutOfRange = IsVolumeFractionOutOfRange(fraction);
-            summary.SpacingInvalid = parameters.CenterSpacingMm < 2.0 * parameters.SphereRadiusMm - 1e-6;
+            summary.SpacingInvalid = parameters.EffectiveLateralSpacingMm < 2.0 * parameters.SphereRadiusMm - 1e-6
+                || parameters.EffectiveSiSpacingMm < 2.0 * parameters.SphereRadiusMm - 1e-6;
             summary.HasValidVolume = geometry != null && geometry.IsValid;
 
             if (summary.SpacingInvalid)
@@ -123,6 +127,64 @@ namespace SFRThelper.Helpers
             if (double.IsNaN(value) || double.IsInfinity(value))
                 return "n/a";
             return value.ToString("F2", CultureInfo.InvariantCulture) + " cc";
+        }
+
+        public static double Geud(IList<DvhBin> bins, double a)
+        {
+            if (bins == null || bins.Count < 2 || Math.Abs(a) < 1e-9)
+                return double.NaN;
+
+            double weighted = 0;
+            double volume = 0;
+            for (int i = 0; i < bins.Count - 1; i++)
+            {
+                double dV = bins[i].CumulativeVolume - bins[i + 1].CumulativeVolume;
+                if (dV < 0)
+                    dV = -dV;
+                if (dV <= 0)
+                    continue;
+                double dose = bins[i].DoseGy;
+                if (dose < 0)
+                    dose = 0;
+                weighted += dV * Math.Pow(dose, a);
+                volume += dV;
+            }
+            if (volume <= 0)
+                return double.NaN;
+            return Math.Pow(weighted / volume, 1.0 / a);
+        }
+
+        public static double Mean(IEnumerable<double> values)
+        {
+            var list = values == null ? null : values.Where(v => !double.IsNaN(v)).ToList();
+            if (list == null || list.Count == 0)
+                return double.NaN;
+            return list.Average();
+        }
+
+        public static double StdDev(IEnumerable<double> values)
+        {
+            var list = values == null ? null : values.Where(v => !double.IsNaN(v)).ToList();
+            if (list == null || list.Count == 0)
+                return double.NaN;
+            double mean = list.Average();
+            double variance = list.Sum(v => (v - mean) * (v - mean)) / list.Count;
+            return Math.Sqrt(variance);
+        }
+
+        public static double Range(IEnumerable<double> values)
+        {
+            var list = values == null ? null : values.Where(v => !double.IsNaN(v)).ToList();
+            if (list == null || list.Count == 0)
+                return double.NaN;
+            return list.Max() - list.Min();
+        }
+
+        public static string FormatGyPerMm(double value)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                return "n/a";
+            return value.ToString("F2", CultureInfo.InvariantCulture) + " Gy/mm";
         }
 
         public static string FormatRatio(double value)

@@ -55,6 +55,27 @@ namespace SFRThelper.Models
         public double D98Percent { get; set; }
         public double V100Percent { get; set; }
         public double D003CcGy { get; set; }
+        public double GeudAMinus10 { get; set; }
+        public double GeudA1 { get; set; }
+        public double GeudA2 { get; set; }
+        public Point3D Center { get; set; }
+        public List<DvhBin> DvhBins { get; set; }
+    }
+
+    public class DvhBin
+    {
+        public double DoseGy { get; set; }
+        public double CumulativeVolume { get; set; }
+    }
+
+    public class DoseGradientRow
+    {
+        public string PeakA { get; set; }
+        public string PeakB { get; set; }
+        public double SeparationMm { get; set; }
+        public double TroughGy { get; set; }
+        public double PeakGy { get; set; }
+        public double GradientGyPerMm { get; set; }
     }
 
     public class SFRTEvaluationResult
@@ -83,6 +104,20 @@ namespace SFRThelper.Models
 
         public double PeakDmeanHomogeneityPercent { get; set; }
         public double PeakDmaxCvPercent { get; set; }
+        public double PeakDmeanMeanGy { get; set; }
+        public double PeakDmeanSdGy { get; set; }
+        public double PeakDmeanRangeGy { get; set; }
+        public double TargetGeudAMinus10 { get; set; }
+        public double ValleyGeudA1 { get; set; }
+        public double ValleyGeudA2 { get; set; }
+        public double DoseGridMaxMm { get; set; }
+        public bool DoseGridCoarse { get; set; }
+        public double TotalMu { get; set; }
+        public double MuPerGy { get; set; }
+        public bool Overmodulated { get; set; }
+        public List<DoseGradientRow> Gradients { get; set; }
+        public double MeanGradientGyPerMm { get; set; }
+        public double MinValleyTroughGy { get; set; }
 
         public SFRTEvaluationResult()
         {
@@ -90,6 +125,7 @@ namespace SFRThelper.Models
             Oars = new List<OarDoseRow>();
             MetricRows = new List<EvaluationMetricRow>();
             Alerts = new List<string>();
+            Gradients = new List<DoseGradientRow>();
         }
 
         public bool HasAlerts

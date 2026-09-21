@@ -58,6 +58,34 @@ namespace SFRThelper.Services
             double targetVol = ctx.Target != null ? ctx.Target.VolumeCc : double.NaN;
             result.VolumeFractionPercent = SfrtMetricsCalculator.VolumeFractionPercent(peaksVol, targetVol);
 
+            if (ctx.Target != null)
+                result.TargetGeudAMinus10 = ctx.Target.GeudAMinus10;
+            if (ctx.Valley != null)
+            {
+                result.ValleyGeudA1 = ctx.Valley.GeudA1;
+                result.ValleyGeudA2 = ctx.Valley.GeudA2;
+            }
+
+            result.DoseGridMaxMm = ctx.DoseGridMaxMm;
+            result.DoseGridCoarse = ctx.DoseGridMaxMm > SFRTParameters.DoseGridWarningMm + 1e-9;
+            result.TotalMu = ctx.TotalMu;
+            if (result.PrescriptionDoseGy.HasValue && result.PrescriptionDoseGy.Value > 0)
+                result.MuPerGy = ctx.TotalMu / result.PrescriptionDoseGy.Value;
+            else
+                result.MuPerGy = double.NaN;
+            result.Overmodulated = !double.IsNaN(result.MuPerGy)
+                && result.MuPerGy > SFRTParameters.OvermodulationMuPerGy;
+
+            if (ctx.Gradients != null)
+            {
+                foreach (var g in ctx.Gradients)
+                    result.Gradients.Add(g);
+                result.MeanGradientGyPerMm = SfrtMetricsCalculator.Mean(result.Gradients.Select(g => g.GradientGyPerMm));
+                result.MinValleyTroughGy = result.Gradients.Count == 0
+                    ? double.NaN
+                    : result.Gradients.Min(g => g.TroughGy);
+            }
+
             if (ctx.IndividualPeaks != null)
             {
                 foreach (var peak in ctx.IndividualPeaks.OrderBy(p => p.Id))
@@ -71,10 +99,13 @@ namespace SFRThelper.Services
                         DminGy = peak.DminGy
                     });
                 }
-                result.PeakDmeanHomogeneityPercent = SfrtMetricsCalculator.CoefficientOfVariationPercent(
-                    result.IndividualPeaks.Select(p => p.DmeanGy));
+                var dmeans = result.IndividualPeaks.Select(p => p.DmeanGy);
+                result.PeakDmeanHomogeneityPercent = SfrtMetricsCalculator.CoefficientOfVariationPercent(dmeans);
                 result.PeakDmaxCvPercent = SfrtMetricsCalculator.CoefficientOfVariationPercent(
                     result.IndividualPeaks.Select(p => p.DmaxGy));
+                result.PeakDmeanMeanGy = SfrtMetricsCalculator.Mean(dmeans);
+                result.PeakDmeanSdGy = SfrtMetricsCalculator.StdDev(dmeans);
+                result.PeakDmeanRangeGy = SfrtMetricsCalculator.Range(dmeans);
             }
 
             if (ctx.Oars != null)
@@ -116,6 +147,24 @@ namespace SFRThelper.Services
                     ? "outside 1.0–5.0%" : "within 1.0–5.0%",
                 Comment = "Volume(Lattice_Peaks) / Volume(Target)"
             });
+            rows.Add(Metric("QA", "Dose grid", "Max voxel",
+                result.DoseGridMaxMm.ToString("F2") + " mm",
+                result.DoseGridCoarse ? "coarse" : "OK",
+                "Flag if max(XRes,YRes,ZRes) > 1.25 mm"));
+            rows.Add(Metric("QA", "Delivery", "MU / Gy",
+                SfrtMetricsCalculator.FormatRatio(result.MuPerGy),
+                result.Overmodulated ? "over-modulated" : "OK",
+                "Total MU / prescription Gy; flag if > 400 MU/Gy"));
+            rows.Add(Metric("Biology", result.TargetId ?? "Target", "gEUD a=-10",
+                SfrtMetricsCalculator.FormatGy(result.TargetGeudAMinus10), "", "Peak-weighted target response"));
+            rows.Add(Metric("Biology", result.ValleyId ?? "Lattice_Valley", "gEUD a=1",
+                SfrtMetricsCalculator.FormatGy(result.ValleyGeudA1), "", "Mean / sparing on valley"));
+            rows.Add(Metric("Biology", result.ValleyId ?? "Lattice_Valley", "gEUD a=2",
+                SfrtMetricsCalculator.FormatGy(result.ValleyGeudA2), "", "Quadratic valley sparing"));
+            rows.Add(Metric("Gradient", "Peak pairs", "Mean gradient",
+                SfrtMetricsCalculator.FormatGyPerMm(result.MeanGradientGyPerMm), "", "Peak-to-valley spatial gradient"));
+            rows.Add(Metric("Gradient", "Peak pairs", "Min trough",
+                SfrtMetricsCalculator.FormatGy(result.MinValleyTroughGy), "", "Minimum sampled valley trough"));
 
             AddStructureRows(rows, "Peaks", result.Peaks, includeV100: true, valleySet: false);
             AddStructureRows(rows, "Valley", result.Valley, includeV100: false, valleySet: true);
@@ -133,6 +182,12 @@ namespace SFRThelper.Services
 
             if (result.IndividualPeaks.Count > 0)
             {
+                rows.Add(Metric("Peaks", "Peak_xx", "Dmean mean",
+                    SfrtMetricsCalculator.FormatGy(result.PeakDmeanMeanGy), "", "Inter-peak Dmean mean"));
+                rows.Add(Metric("Peaks", "Peak_xx", "Dmean SD",
+                    SfrtMetricsCalculator.FormatGy(result.PeakDmeanSdGy), "", "Inter-peak Dmean standard deviation"));
+                rows.Add(Metric("Peaks", "Peak_xx", "Dmean range",
+                    SfrtMetricsCalculator.FormatGy(result.PeakDmeanRangeGy), "", "Inter-peak Dmean range"));
                 rows.Add(Metric("Peaks", "Peak_xx", "Dmean CV",
                     SfrtMetricsCalculator.FormatPercent(result.PeakDmeanHomogeneityPercent), "",
                     "Inter-peak mean-dose coefficient of variation"));
@@ -198,6 +253,16 @@ namespace SFRThelper.Services
             var alerts = new List<string>();
             if (!string.IsNullOrEmpty(contextError))
                 alerts.Add(contextError);
+            if (result.DoseGridCoarse)
+            {
+                alerts.Add("Dose grid resolution (> 1.25 mm) creates partial-volume averaging, underestimating true peak dose.");
+            }
+            if (result.Overmodulated)
+            {
+                alerts.Add("Total MU / prescription dose is "
+                    + SfrtMetricsCalculator.FormatRatio(result.MuPerGy)
+                    + " MU/Gy (threshold 400). Potential over-modulation.");
+            }
             if (SfrtMetricsCalculator.IsPvdrLow(result.PvdrMean))
                 alerts.Add("PVDR_mean is " + SfrtMetricsCalculator.FormatRatio(result.PvdrMean) + " (threshold 2.5).");
             if (SfrtMetricsCalculator.IsPvdrLow(result.Pvdr10_90))

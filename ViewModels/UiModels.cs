@@ -24,4 +24,17 @@ namespace SFRThelper.ViewModels
         public SphereGenerationMode Value { get; set; }
         public string Display { get; set; }
     }
+
+    public class ProtocolOption
+    {
+        public ClinicalProtocolPreset Value { get; set; }
+        public string Display { get; set; }
+        public string Description { get; set; }
+    }
+
+    public class SpacingModeOption
+    {
+        public bool IsDirectional { get; set; }
+        public string Display { get; set; }
+    }
 }

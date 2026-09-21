@@ -20,6 +20,7 @@
     <Compile Include="..\..\Models\Point3D.cs" Link="Models\Point3D.cs" />
     <Compile Include="..\..\Models\SFRTEvaluationResult.cs" Link="Models\SFRTEvaluationResult.cs" />
     <Compile Include="..\..\Models\SFRTParameters.cs" Link="Models\SFRTParameters.cs" />
+    <Compile Include="..\..\Models\SFRTProtocolPresets.cs" Link="Models\SFRTProtocolPresets.cs" />
     <Compile Include="..\..\Models\SphereModel.cs" Link="Models\SphereModel.cs" />
     <Compile Include="..\..\Models\StructureCreationResult.cs" Link="Models\StructureCreationResult.cs" />
     <Compile Include="..\..\Models\StructureListItem.cs" Link="Models\StructureListItem.cs" />
@@ -27,6 +28,8 @@
     <Compile Include="..\..\Models\VoxelMask.cs" Link="Models\VoxelMask.cs" />
     <Compile Include="..\..\Helpers\SfrtMetricsCalculator.cs" Link="Helpers\SfrtMetricsCalculator.cs" />
     <Compile Include="..\..\Services\IESAPIService.cs" Link="Services\IESAPIService.cs" />
+    <Compile Include="..\..\Services\PlanAutomationService.cs" Link="Services\PlanAutomationService.cs" />
+    <Compile Include="..\..\Services\QaReportExporter.cs" Link="Services\QaReportExporter.cs" />
     <Compile Include="..\..\Services\SFRTEvaluationService.cs" Link="Services\SFRTEvaluationService.cs" />
     <Compile Include="..\..\Services\SpatialHashGrid.cs" Link="Services\SpatialHashGrid.cs" />
     <Compile Include="..\..\Services\StructureTransaction.cs" Link="Services\StructureTransaction.cs" />
