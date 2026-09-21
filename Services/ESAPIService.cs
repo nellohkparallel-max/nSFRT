@@ -196,9 +196,8 @@ namespace SFRThelper.Services
                                 continue;
                             }
 
-                            bool doseValid = false;
-                            try { doseValid = sum.IsDoseValid; }
-                            catch { doseValid = sum.Dose != null; }
+                            // PlanSum has no IsDoseValid in ESAPI 16.1; PlanningItem.Dose is the equivalent signal.
+                            bool doseValid = sum.Dose != null;
 
                             items.Add(new PlanListItem
                             {
@@ -645,19 +644,23 @@ namespace SFRThelper.Services
                 snap.D95Gy = DoseAtVolumeGy(item, structure, 95.0);
                 snap.D98Gy = DoseAtVolumeGy(item, structure, 98.0);
 
-                var dvhRel = item.GetDVHCumulativeData(structure, DoseValuePresentation.Relative, VolumePresentation.Relative, 0.1);
-                if (dvhRel != null)
+                // ESAPI 16.1: only absolute dose is supported for PlanSums.
+                if (!(item is PlanSum))
                 {
-                    snap.DmaxPercent = dvhRel.MaxDose.Dose;
-                    snap.DmeanPercent = dvhRel.MeanDose.Dose;
-                    snap.DminPercent = dvhRel.MinDose.Dose;
+                    var dvhRel = item.GetDVHCumulativeData(structure, DoseValuePresentation.Relative, VolumePresentation.Relative, 0.1);
+                    if (dvhRel != null)
+                    {
+                        snap.DmaxPercent = dvhRel.MaxDose.Dose;
+                        snap.DmeanPercent = dvhRel.MeanDose.Dose;
+                        snap.DminPercent = dvhRel.MinDose.Dose;
+                    }
+                    snap.D2Percent = DoseAtVolumePercent(item, structure, 2.0);
+                    snap.D5Percent = DoseAtVolumePercent(item, structure, 5.0);
+                    snap.D10Percent = DoseAtVolumePercent(item, structure, 10.0);
+                    snap.D90Percent = DoseAtVolumePercent(item, structure, 90.0);
+                    snap.D95Percent = DoseAtVolumePercent(item, structure, 95.0);
+                    snap.D98Percent = DoseAtVolumePercent(item, structure, 98.0);
                 }
-                snap.D2Percent = DoseAtVolumePercent(item, structure, 2.0);
-                snap.D5Percent = DoseAtVolumePercent(item, structure, 5.0);
-                snap.D10Percent = DoseAtVolumePercent(item, structure, 10.0);
-                snap.D90Percent = DoseAtVolumePercent(item, structure, 90.0);
-                snap.D95Percent = DoseAtVolumePercent(item, structure, 95.0);
-                snap.D98Percent = DoseAtVolumePercent(item, structure, 98.0);
 
                 if (rxGy.HasValue && rxGy.Value > 0)
                 {
@@ -901,18 +904,19 @@ namespace SFRThelper.Services
             if (info == null || _context.Patient == null)
                 return false;
 
+            // C# forbids capturing out/ref parameters in lambdas (CS1628).
+            string courseId = info.CourseId;
+            string planId = info.PlanId;
+            bool isPlanSum = info.IsPlanSum;
+
             foreach (var course in _context.Patient.Courses)
             {
-                if (!string.Equals(course.Id, info.CourseId, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(course.Id, courseId, StringComparison.OrdinalIgnoreCase))
                     continue;
-                if (info.IsPlanSum)
-                {
-                    item = course.PlanSums.FirstOrDefault(s => s.Id == info.PlanId);
-                }
+                if (isPlanSum)
+                    item = course.PlanSums.FirstOrDefault(s => s.Id == planId);
                 else
-                {
-                    item = course.PlanSetups.FirstOrDefault(s => s.Id == info.PlanId);
-                }
+                    item = course.PlanSetups.FirstOrDefault(s => s.Id == planId);
                 if (item != null)
                     return true;
             }
