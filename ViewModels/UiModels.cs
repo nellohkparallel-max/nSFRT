@@ -37,4 +37,10 @@ namespace SFRThelper.ViewModels
         public bool IsDirectional { get; set; }
         public string Display { get; set; }
     }
+
+    public class MaximizationStrategyOption
+    {
+        public SphereMaximizationStrategy Value { get; set; }
+        public string Display { get; set; }
+    }
 }

@@ -77,7 +77,7 @@
 
         <TabControl Grid.Row="1">
             <!-- Tab 1: Geometry -->
-            <TabItem Header="Geometry Configuration">
+            <TabItem Header="Geometry &amp; Optimization">
                 <Grid Margin="6">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="460"/>
@@ -229,6 +229,42 @@
                                              Text="{Binding Parameters.MaxSphereCount, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
                                              IsEnabled="{Binding IsIdle}"/>
                                 </Grid>
+                            </GroupBox>
+
+                            <GroupBox Header="Sphere maximization" Margin="0,0,0,8">
+                                <StackPanel Margin="4">
+                                    <CheckBox Content="Maximize Sphere Count (Auto-Shift Grid)"
+                                              IsChecked="{Binding Parameters.EnableSphereMaximization}"
+                                              IsEnabled="{Binding IsIdle}"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="176"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Strategy:" VerticalAlignment="Center" Margin="4"/>
+                                        <ComboBox Grid.Row="0" Grid.Column="1"
+                                                  ItemsSource="{Binding MaximizationStrategyOptions}"
+                                                  DisplayMemberPath="Display"
+                                                  SelectedValuePath="Value"
+                                                  SelectedValue="{Binding Parameters.OptimizationStrategy}"
+                                                  IsEnabled="{Binding Parameters.EnableSphereMaximization}"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Max iterations:" VerticalAlignment="Center" Margin="4"/>
+                                        <DockPanel Grid.Row="1" Grid.Column="1" Margin="4">
+                                            <TextBox DockPanel.Dock="Right" Width="52"
+                                                     Text="{Binding Parameters.MaxIterations, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                                     IsEnabled="{Binding Parameters.EnableSphereMaximization}"/>
+                                            <Slider Minimum="10" Maximum="1000" TickFrequency="10"
+                                                    Value="{Binding Parameters.MaxIterations, UpdateSourceTrigger=PropertyChanged}"
+                                                    IsEnabled="{Binding Parameters.EnableSphereMaximization}"/>
+                                        </DockPanel>
+                                    </Grid>
+                                    <TextBlock Text="{Binding MaximizationStatusText}" TextWrapping="Wrap"
+                                               Margin="4,6,4,2" FontFamily="Consolas" FontSize="12"/>
+                                </StackPanel>
                             </GroupBox>
 
                             <GroupBox Header="Pre-calculation summary" Margin="0,0,0,8">

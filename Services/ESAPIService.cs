@@ -720,14 +720,14 @@ namespace SFRThelper.Services
                 var opt = plan.OptimizationSetup;
                 opt.AddPointObjective(peaks, OptimizationObjectiveOperator.Lower, new DoseValue(rxGy, DoseValue.DoseUnit.Gy), 0, 120);
                 opt.AddPointObjective(peaks, OptimizationObjectiveOperator.Lower, new DoseValue(rxGy, DoseValue.DoseUnit.Gy), 95, 100);
-                opt.AddPointObjective(valley, OptimizationObjectiveOperator.Upper, new DoseValue(0.33 * rxGy, DoseValue.DoseUnit.Gy), 0, 90);
-                opt.AddPointObjective(valley, OptimizationObjectiveOperator.Upper, new DoseValue(0.30 * rxGy, DoseValue.DoseUnit.Gy), 50, 80);
+                opt.AddPointObjective(valley, OptimizationObjectiveOperator.Upper, new DoseValue(0.35 * rxGy, DoseValue.DoseUnit.Gy), 0, 90);
+                opt.AddPointObjective(valley, OptimizationObjectiveOperator.Upper, new DoseValue(0.30 * rxGy, DoseValue.DoseUnit.Gy), 50, 70);
                 if (ring01 != null)
                     opt.AddPointObjective(ring01, OptimizationObjectiveOperator.Upper, new DoseValue(0.50 * rxGy, DoseValue.DoseUnit.Gy), 0, 70);
                 if (ring13 != null)
                     opt.AddPointObjective(ring13, OptimizationObjectiveOperator.Upper, new DoseValue(0.30 * rxGy, DoseValue.DoseUnit.Gy), 0, 60);
                 opt.AddAutomaticNormalTissueObjective(40);
-                return "Seeded PO objectives on Lattice_Peaks (100% lower), Lattice_Valley (≤33% upper), and SFRT rings.";
+                return "Seeded PO objectives on Lattice_Peaks (100% lower), Lattice_Valley (≤35% upper), and SFRT rings.";
             }
             catch (Exception ex)
             {
@@ -1097,11 +1097,14 @@ namespace SFRThelper.Services
             if (bounds.IsEmpty)
                 return VoxelMask.Empty();
 
-            double imageMin = 1.0;
+            double step = 1.0;
             if (CurrentImage != null)
-                imageMin = Math.Min(CurrentImage.XRes, Math.Min(CurrentImage.YRes, CurrentImage.ZRes));
-
-            double step = Math.Max(1.0, Math.Min(2.0, Math.Min(parameters.SphereRadiusMm * 0.5, imageMin)));
+            {
+                double imageMin = Math.Min(CurrentImage.XRes, Math.Min(CurrentImage.YRes, CurrentImage.ZRes));
+                if (imageMin > 0)
+                    step = Math.Max(1.0, Math.Min(2.0, imageMin));
+            }
+            step = Math.Min(step, Math.Max(1.0, parameters.SphereRadiusMm * 0.5));
             const int maxDim = 192;
             int nx = Math.Max(1, (int)Math.Ceiling(bounds.SizeX / step));
             int ny = Math.Max(1, (int)Math.Ceiling(bounds.SizeY / step));
@@ -1139,6 +1142,8 @@ namespace SFRThelper.Services
                     }
                 }
             }
+            Report(progress, "Computing V_valid distance field...");
+            mask.ComputeDistanceField();
             return mask;
         }
 

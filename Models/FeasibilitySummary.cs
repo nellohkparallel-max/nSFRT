@@ -24,6 +24,9 @@ namespace SFRThelper.Models
         public bool VolumeFractionOutOfRange { get; set; }
         public bool SpacingInvalid { get; set; }
         public bool HasValidVolume { get; set; }
+        public int BaselineCount { get; set; }
+        public int OptimizedCount { get; set; }
+        public string MaximizationSummary { get; set; }
         public List<string> Warnings { get; set; }
 
         public FeasibilitySummary()
@@ -51,7 +54,9 @@ namespace SFRThelper.Models
                     + (string.IsNullOrEmpty(Oar1Id) ? "  (none)" : "  (" + Oar1Id + ")"));
                 sb.AppendLine("OAR 2 clearance: " + Format(Oar2ClearanceMm) + " mm"
                     + (string.IsNullOrEmpty(Oar2Id) ? "  (none)" : "  (" + Oar2Id + ")"));
-                sb.AppendLine("Packing: " + SphereOptimizerLabel(PackingMode));
+                    sb.AppendLine("Packing: " + SphereOptimizerLabel(PackingMode));
+                if (!string.IsNullOrEmpty(MaximizationSummary))
+                    sb.AppendLine(MaximizationSummary);
                 if (!HasValidVolume)
                     sb.AppendLine("No valid interior volume for the current radius and clearances.");
                 if (Warnings != null)

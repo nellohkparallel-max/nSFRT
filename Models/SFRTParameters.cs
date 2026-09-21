@@ -33,6 +33,9 @@ namespace SFRThelper.Models
         private double _externalClearanceMm = DefaultExternalClearanceMm;
         private double _gridRotationDeg = DefaultGridRotationDeg;
         private int _maxSphereCount = 500;
+        private bool _enableSphereMaximization = true;
+        private int _maxIterations = 100;
+        private SphereMaximizationStrategy _optimizationStrategy = SphereMaximizationStrategy.RigidPhaseShift;
         private string _selectedTargetId;
         private string _oar1StructureId = StructureListItem.NoneId;
         private string _oar2StructureId = StructureListItem.NoneId;
@@ -293,6 +296,43 @@ namespace SFRThelper.Models
             }
         }
 
+        public bool EnableSphereMaximization
+        {
+            get { return _enableSphereMaximization; }
+            set
+            {
+                if (_enableSphereMaximization == value)
+                    return;
+                _enableSphereMaximization = value;
+                OnPropertyChanged(nameof(EnableSphereMaximization));
+            }
+        }
+
+        public int MaxIterations
+        {
+            get { return _maxIterations; }
+            set
+            {
+                if (_maxIterations == value)
+                    return;
+                _maxIterations = value;
+                OnPropertyChanged(nameof(MaxIterations));
+                ValidateAll();
+            }
+        }
+
+        public SphereMaximizationStrategy OptimizationStrategy
+        {
+            get { return _optimizationStrategy; }
+            set
+            {
+                if (_optimizationStrategy == value)
+                    return;
+                _optimizationStrategy = value;
+                OnPropertyChanged(nameof(OptimizationStrategy));
+            }
+        }
+
         /// <summary>Legacy alias: composite-only generation.</summary>
         public bool SingleStructureOnly
         {
@@ -508,6 +548,7 @@ namespace SFRThelper.Models
             ValidateProperty(nameof(Oar2ClearanceMm), () => ValidateNonNegative(Oar2ClearanceMm, "OAR 2 clearance"));
             ValidateProperty(nameof(GridRotationDeg), ValidateRotation);
             ValidateProperty(nameof(MaxSphereCount), ValidateMaxCount);
+            ValidateProperty(nameof(MaxIterations), ValidateMaxIterations);
             ValidateProperty(nameof(Oar1StructureId), ValidateOars);
             ValidateProperty(nameof(Oar2StructureId), ValidateOars);
         }
@@ -578,6 +619,15 @@ namespace SFRThelper.Models
                 return new List<string> { "Maximum sphere count must be at least 1." };
             if (MaxSphereCount > 5000)
                 return new List<string> { "Maximum sphere count is limited to 5000." };
+            return null;
+        }
+
+        private List<string> ValidateMaxIterations()
+        {
+            if (MaxIterations < 10)
+                return new List<string> { "Max iterations must be at least 10." };
+            if (MaxIterations > 1000)
+                return new List<string> { "Max iterations is limited to 1000." };
             return null;
         }
 

@@ -39,9 +39,22 @@ namespace SFRThelper.Models
             return new Point3D(X + other.X, Y + other.Y, Z + other.Z);
         }
 
+        public Point3D Subtract(Point3D other)
+        {
+            return new Point3D(X - other.X, Y - other.Y, Z - other.Z);
+        }
+
         public Point3D Scale(double s)
         {
             return new Point3D(X * s, Y * s, Z * s);
+        }
+
+        public Point3D NormalizedOrZero()
+        {
+            double n = Math.Sqrt(X * X + Y * Y + Z * Z);
+            if (n < 1e-12)
+                return new Point3D(0, 0, 0);
+            return new Point3D(X / n, Y / n, Z / n);
         }
 
         public bool Equals(Point3D other)

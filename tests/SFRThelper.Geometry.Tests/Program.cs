@@ -37,6 +37,11 @@ namespace SFRThelper.Geometry.Tests
             Run("Coarse dose grid raises the 1.25 mm alert", TestDoseGridAlert);
             Run("Feasibility uses packed count and clearances", TestFeasibility);
             Run("QA exporter writes CSV headers and PDF bytes", TestQaExport);
+            Run("Halton samples the unit interval", TestHalton);
+            Run("Score prefers higher mean border distance when N ties", TestMaximizationScore);
+            Run("Rigid phase-shift increases sphere count vs COM phase", TestPhaseShiftMaximization);
+            Run("Particle relaxation stays inside V_valid and respects spacing", TestParticleRelaxation);
+            Run("EDT distance is larger at the interior than at the border", TestDistanceField);
 
             Console.WriteLine();
             Console.WriteLine("Passed: " + _passed.ToString(CultureInfo.InvariantCulture)
@@ -174,7 +179,8 @@ namespace SFRThelper.Geometry.Tests
                 CenterSpacingMm = 15,
                 PackingMode = PackingGeometryMode.HexagonalClosePacking,
                 MaxSphereCount = 200,
-                SelectedTargetId = "GTV"
+                SelectedTargetId = "GTV",
+                EnableSphereMaximization = false
             };
 
             var optimizer = new SphereOptimizer();
@@ -384,6 +390,102 @@ namespace SFRThelper.Geometry.Tests
             string csv = File.ReadAllText(csvPath);
             AssertTrue(csv.Contains("PVDR_mean"), "csv metric");
             AssertTrue(File.ReadAllBytes(Path.Combine(dir, "report.pdf")).Length > 20, "pdf bytes");
+        }
+
+        private static void TestHalton()
+        {
+            double h = SphereOptimizer.Halton(0, 2);
+            AssertTrue(h > 0 && h < 1, "Halton in (0,1)");
+            AssertTrue(Math.Abs(SphereOptimizer.Halton(0, 2) - SphereOptimizer.Halton(1, 2)) > 1e-9, "distinct samples");
+        }
+
+        private static void TestMaximizationScore()
+        {
+            double a = SphereOptimizer.Score(7, 8.0);
+            double b = SphereOptimizer.Score(7, 2.0);
+            AssertTrue(a > b, "tie-break on mean distance");
+            AssertTrue(SphereOptimizer.Score(8, 0) > a, "count dominates distance");
+        }
+
+        private static LatticeGeometryContext OffsetBoxGeometry()
+        {
+            // V_valid [1,29]^3 mm, COM at (15,15,15). Unshifted cubic d=15 keeps only the COM.
+            var mask = new VoxelMask(1, 1, 1, 1, 1, 1, 28, 28, 28);
+            for (int iz = 0; iz < 28; iz++)
+                for (int iy = 0; iy < 28; iy++)
+                    for (int ix = 0; ix < 28; ix++)
+                        mask.Set(ix, iy, iz, true);
+            mask.ComputeDistanceField();
+            var com = new Point3D(15, 15, 15);
+            return new LatticeGeometryContext
+            {
+                CenterOfMass = com,
+                TargetBounds = BoundingBox3D.FromMinMax(1, 1, 1, 29, 29, 29),
+                ValidVolume = mask,
+                TargetVolumeCc = 22,
+                ValidVolumeCc = mask.VolumeCc,
+                Transform = LatticeTransform.Identity(com)
+            };
+        }
+
+        private static SFRTParameters CubicOffsetParameters(bool maximize, SphereMaximizationStrategy strategy)
+        {
+            return new SFRTParameters
+            {
+                SelectedTargetId = "GTV",
+                SphereRadiusMm = 5,
+                CenterSpacingMm = 15,
+                PackingMode = PackingGeometryMode.SimpleCubic,
+                MaxSphereCount = 50,
+                GridRotationDeg = 0,
+                EnableSphereMaximization = maximize,
+                MaxIterations = 40,
+                OptimizationStrategy = strategy
+            };
+        }
+
+        private static void TestPhaseShiftMaximization()
+        {
+            var geometry = OffsetBoxGeometry();
+            var optimizer = new SphereOptimizer();
+            LatticePackingResult baseline = optimizer.GenerateLattice(geometry, CubicOffsetParameters(false, SphereMaximizationStrategy.RigidPhaseShift));
+            LatticePackingResult optimized = optimizer.GenerateLattice(geometry, CubicOffsetParameters(true, SphereMaximizationStrategy.RigidPhaseShift));
+            AssertTrue(baseline.SphereCount >= 1, "baseline at least COM");
+            AssertTrue(optimized.OptimizedCount > baseline.SphereCount, "phase shift should add spheres");
+            AssertTrue(optimized.SphereCountGain == optimized.OptimizedCount - optimized.BaselineCount, "gain math");
+            foreach (var sphere in optimized.Spheres)
+                AssertTrue(geometry.ValidVolume.Contains(sphere.Center), "optimized center outside V_valid");
+        }
+
+        private static void TestParticleRelaxation()
+        {
+            var geometry = OffsetBoxGeometry();
+            var optimizer = new SphereOptimizer();
+            LatticePackingResult result = optimizer.GenerateLattice(
+                geometry, CubicOffsetParameters(true, SphereMaximizationStrategy.ParticleRelaxation));
+            AssertTrue(result.SphereCount >= result.BaselineCount, "relaxation never worse than baseline");
+            var hash = new SpatialHashGrid(15);
+            foreach (var sphere in result.Spheres)
+            {
+                AssertTrue(geometry.ValidVolume.Contains(sphere.Center), "relaxed center outside V_valid");
+                AssertTrue(!hash.HasNeighborWithin(sphere.Center, 15), "spacing violation");
+                hash.Add(sphere.Center);
+            }
+        }
+
+        private static void TestDistanceField()
+        {
+            var mask = new VoxelMask(0, 0, 0, 1, 1, 1, 11, 11, 11);
+            for (int iz = 0; iz < 11; iz++)
+                for (int iy = 0; iy < 11; iy++)
+                    for (int ix = 0; ix < 11; ix++)
+                        mask.Set(ix, iy, iz, true);
+            mask.ComputeDistanceField();
+            double border = mask.DistanceToBoundaryMm(new Point3D(0.5, 5.5, 5.5));
+            double interior = mask.DistanceToBoundaryMm(new Point3D(5.5, 5.5, 5.5));
+            AssertTrue(interior > border + 1.0, "interior farther from boundary than the face voxel");
+            AssertTrue(!mask.Contains(new Point3D(-1, 5, 5)), "outside");
+            AssertNear(mask.DistanceToBoundaryMm(new Point3D(-1, 5, 5)), 0, 1e-9, "outside distance");
         }
 
         private sealed class FakeEsapi : IESAPIService

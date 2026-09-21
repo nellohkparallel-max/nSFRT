@@ -38,6 +38,7 @@ namespace SFRThelper.ViewModels
         private double _viewMinX;
         private double _viewMinY;
         private double _viewScale = 1.0;
+        private string _maximizationStatusText = "Maximize sphere count to search phase shifts inside the unit cell.";
         private const double ViewPadding = 20.0;
 
         public SFRTParameters Parameters { get; private set; }
@@ -54,6 +55,7 @@ namespace SFRThelper.ViewModels
         public IReadOnlyList<GenerationModeOption> GenerationModeOptions { get; private set; }
         public IReadOnlyList<ProtocolOption> ProtocolOptions { get; private set; }
         public IReadOnlyList<SpacingModeOption> SpacingModeOptions { get; private set; }
+        public IReadOnlyList<MaximizationStrategyOption> MaximizationStrategyOptions { get; private set; }
 
         public MainViewModel(IESAPIService esapi)
         {
@@ -97,6 +99,11 @@ namespace SFRThelper.ViewModels
             {
                 new SpacingModeOption { IsDirectional = false, Display = "Universal (dx = dy = dz)" },
                 new SpacingModeOption { IsDirectional = true, Display = "Directional (dxy ≠ dSI)" }
+            };
+            MaximizationStrategyOptions = new[]
+            {
+                new MaximizationStrategyOption { Value = SphereMaximizationStrategy.RigidPhaseShift, Display = "Rigid Phase-Shift Search" },
+                new MaximizationStrategyOption { Value = SphereMaximizationStrategy.ParticleRelaxation, Display = "Particle Relaxation" }
             };
 
             PreviewLatticeCommand = new AsyncRelayCommand(PreviewLatticeAsync, () => CanPreview);
@@ -253,6 +260,12 @@ namespace SFRThelper.ViewModels
         public string FeasibilityText
         {
             get { return Feasibility != null ? Feasibility.SummaryText : string.Empty; }
+        }
+
+        public string MaximizationStatusText
+        {
+            get { return _maximizationStatusText; }
+            set { SetProperty(ref _maximizationStatusText, value, nameof(MaximizationStatusText)); }
         }
 
         public int CurrentSliceIndex
@@ -555,17 +568,28 @@ namespace SFRThelper.ViewModels
                     return;
                 }
 
-                StatusMessage = "Phase 2: packing lattice on a worker thread...";
+                StatusMessage = "Phase 2: packing and maximizing lattice on a worker thread...";
+                var liveStatus = new Progress<string>(m =>
+                {
+                    StatusMessage = m;
+                    MaximizationStatusText = m;
+                });
                 LatticePackingResult packing = await Task.Run(() =>
-                    _sphereOptimizer.GenerateLattice(geometry, Parameters, fixedSpheres, token, packProgress), token).ConfigureAwait(true);
+                    _sphereOptimizer.GenerateLattice(geometry, Parameters, fixedSpheres, token, packProgress, liveStatus), token).ConfigureAwait(true);
 
                 GeneratedSpheres.Clear();
                 foreach (var sphere in packing.Spheres)
                     GeneratedSpheres.Add(sphere);
 
                 Feasibility = SfrtMetricsCalculator.BuildFeasibility(geometry, Parameters, packing.SphereCount);
+                Feasibility.BaselineCount = packing.BaselineCount;
+                Feasibility.OptimizedCount = packing.OptimizedCount;
+                Feasibility.MaximizationSummary = packing.MaximizationSummary;
                 OnPropertyChanged(nameof(FeasibilityText));
                 StatusMessage = packing.Message;
+                MaximizationStatusText = packing.MaximizationRan
+                    ? packing.Message
+                    : packing.MaximizationSummary;
                 WorkProgress = 90;
 
                 if (_geometry != null && _image != null)
@@ -750,7 +774,7 @@ namespace SFRThelper.ViewModels
                 return;
             try
             {
-                QaReportExporter.Export(Evaluation, Parameters, dialog.FileName);
+                QaReportExporter.Export(Evaluation, Parameters, dialog.FileName, GeneratedSpheres, CallEsapi(() => _esapi.GetPatientStatus()));
                 StatusMessage = "Wrote CSV and PDF next to " + dialog.FileName;
             }
             catch (Exception ex)

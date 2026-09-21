@@ -27,4 +27,10 @@ namespace SFRThelper.Models
         Universal = 0,
         Directional = 1
     }
+
+    public enum SphereMaximizationStrategy
+    {
+        RigidPhaseShift = 0,
+        ParticleRelaxation = 1
+    }
 }

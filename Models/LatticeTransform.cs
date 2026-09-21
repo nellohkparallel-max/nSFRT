@@ -47,5 +47,13 @@ namespace SFRThelper.Models
                 Origin.Y + Ryx * lx + Ryy * ly + Ryz * lz,
                 Origin.Z + Rzx * lx + Rzy * ly + Rzz * lz);
         }
+
+        /// <summary>Translate the lattice origin by a shift in lattice-local coordinates.</summary>
+        public LatticeTransform WithLocalShift(double lx, double ly, double lz)
+        {
+            LatticeTransform t = this;
+            t.Origin = ToPatient(lx, ly, lz);
+            return t;
+        }
     }
 }

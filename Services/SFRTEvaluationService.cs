@@ -255,7 +255,7 @@ namespace SFRThelper.Services
                 alerts.Add(contextError);
             if (result.DoseGridCoarse)
             {
-                alerts.Add("Dose grid resolution (> 1.25 mm) creates partial-volume averaging, underestimating true peak dose.");
+                alerts.Add("Warning: Dose grid resolution > 1.25 mm causes partial-volume averaging, underestimating peak dose and compressing PVDR.");
             }
             if (result.Overmodulated)
             {

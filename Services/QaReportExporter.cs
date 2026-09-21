@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -15,6 +16,16 @@ namespace SFRThelper.Services
     {
         public static void Export(SFRTEvaluationResult result, SFRTParameters parameters, string csvPath)
         {
+            Export(result, parameters, csvPath, null, null);
+        }
+
+        public static void Export(
+            SFRTEvaluationResult result,
+            SFRTParameters parameters,
+            string csvPath,
+            IEnumerable<SphereModel> spheres,
+            string patientStatus)
+        {
             if (string.IsNullOrEmpty(csvPath))
                 throw new ArgumentException("A destination path is required.", "csvPath");
 
@@ -26,13 +37,26 @@ namespace SFRThelper.Services
             string csvFull = Path.Combine(directory, stem + ".csv");
             string pdfFull = Path.Combine(directory, stem + ".pdf");
 
-            File.WriteAllText(csvFull, BuildCsv(result, parameters), Encoding.UTF8);
-            File.WriteAllBytes(pdfFull, BuildPdf(BuildReportLines(result, parameters)));
+            File.WriteAllText(csvFull, BuildCsv(result, parameters, spheres, patientStatus), Encoding.UTF8);
+            File.WriteAllBytes(pdfFull, BuildPdf(BuildReportLines(result, parameters, spheres, patientStatus)));
         }
 
         public static string BuildCsv(SFRTEvaluationResult result, SFRTParameters parameters)
         {
+            return BuildCsv(result, parameters, null, null);
+        }
+
+        public static string BuildCsv(
+            SFRTEvaluationResult result,
+            SFRTParameters parameters,
+            IEnumerable<SphereModel> spheres,
+            string patientStatus)
+        {
             var sb = new StringBuilder();
+            sb.AppendLine("Patient," + Csv(patientStatus));
+            if (result != null)
+                sb.AppendLine("Plan," + Csv(result.PlanDisplayName));
+            sb.AppendLine();
             sb.AppendLine("Category,Structure,Metric,Absolute,Relative,Comment");
             if (result != null && result.MetricRows != null)
             {
@@ -67,6 +91,8 @@ namespace SFRThelper.Services
                 sb.AppendLine("SkinClearance_mm," + F(parameters.ExternalBoundaryClearanceMm));
                 sb.AppendLine("Packing," + Csv(parameters.PackingMode.ToString()));
                 sb.AppendLine("Yaw_deg," + F(parameters.GridRotationDeg));
+                sb.AppendLine("Maximization," + (parameters.EnableSphereMaximization ? "true" : "false"));
+                sb.AppendLine("Strategy," + Csv(parameters.OptimizationStrategy.ToString()));
             }
 
             if (result != null)
@@ -84,14 +110,42 @@ namespace SFRThelper.Services
                 sb.AppendLine("gEUD_valley_a2," + F(result.ValleyGeudA2));
             }
 
+            sb.AppendLine();
+            sb.AppendLine("PeakCenters");
+            sb.AppendLine("Id,X_mm,Y_mm,Z_mm,R_mm");
+            if (spheres != null)
+            {
+                foreach (var s in spheres)
+                {
+                    if (s == null)
+                        continue;
+                    sb.Append(Csv(s.Id)).Append(',')
+                      .Append(F(s.X)).Append(',')
+                      .Append(F(s.Y)).Append(',')
+                      .Append(F(s.Z)).Append(',')
+                      .Append(F(s.Radius)).AppendLine();
+                }
+            }
+
             return sb.ToString();
         }
 
         public static string[] BuildReportLines(SFRTEvaluationResult result, SFRTParameters parameters)
         {
-            var lines = new System.Collections.Generic.List<string>();
+            return BuildReportLines(result, parameters, null, null);
+        }
+
+        public static string[] BuildReportLines(
+            SFRTEvaluationResult result,
+            SFRTParameters parameters,
+            IEnumerable<SphereModel> spheres,
+            string patientStatus)
+        {
+            var lines = new List<string>();
             lines.Add("nSFRT Lattice / SFRT QA Report");
             lines.Add("Generated " + DateTime.Now.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture));
+            if (!string.IsNullOrEmpty(patientStatus))
+                lines.Add("Patient: " + patientStatus);
             lines.Add(string.Empty);
             if (result != null)
             {
@@ -122,6 +176,21 @@ namespace SFRThelper.Services
                     + "   dxy=" + F(parameters.EffectiveLateralSpacingMm)
                     + "   dSI=" + F(parameters.EffectiveSiSpacingMm)
                     + "   yaw=" + F(parameters.GridRotationDeg) + " deg");
+            }
+            if (spheres != null)
+            {
+                lines.Add(string.Empty);
+                lines.Add("Peak coordinates (mm):");
+                int shown = 0;
+                foreach (var s in spheres)
+                {
+                    if (s == null || shown >= 24)
+                        break;
+                    lines.Add(string.Format(CultureInfo.InvariantCulture,
+                        "  {0}: ({1:F1}, {2:F1}, {3:F1})  r={4:F1}",
+                        s.Id, s.X, s.Y, s.Z, s.Radius));
+                    shown++;
+                }
             }
             lines.Add(string.Empty);
             lines.Add("Alerts:");
