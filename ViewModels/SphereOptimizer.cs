@@ -1,391 +1,243 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using SFRThelper.Models;
-using VMS.TPS.Common.Model.API;
-using VMS.TPS.Common.Model.Types;
-using System.Windows.Media.Media3D;
+using SFRThelper.Services;
 
 namespace SFRThelper.ViewModels
 {
+    /// <summary>
+    /// CPU-only lattice generator. Phase 2 of the pipeline: zero VMS.TPS references.
+    /// Anchors (0,0,0) at the target center of mass and rejects centers outside V_valid.
+    /// </summary>
     public class SphereOptimizer
     {
-        public class GridSearchResult
+        public const double DefaultCollisionEpsilonMm = 1e-4;
+
+        public LatticePackingResult GenerateLattice(
+            LatticeGeometryContext geometry,
+            SFRTParameters parameters)
         {
-            public List<VVector> ValidCenters { get; set; } = new List<VVector>();
-            public VVector BestShift { get; set; }
-            public int SphereCount { get; set; }
-            public double PackingEfficiency { get; set; }
+            return GenerateLattice(geometry, parameters, null, System.Threading.CancellationToken.None);
         }
 
-        public List<SphereModel> OptimizeSpherePlacement(Structure ptv, double sphereRadius, double centerSpacing)
+        public LatticePackingResult GenerateLattice(
+            LatticeGeometryContext geometry,
+            SFRTParameters parameters,
+            IReadOnlyList<SphereModel> fixedSpheres,
+            System.Threading.CancellationToken token)
         {
-            return OptimizeSpherePlacement(ptv, sphereRadius, centerSpacing, 0.0, 100);
-        }
-
-        public List<SphereModel> OptimizeSpherePlacement(Structure ptv, double sphereRadius, double centerSpacing, double boundaryMarginMm)
-        {
-            return OptimizeSpherePlacement(ptv, sphereRadius, centerSpacing, boundaryMarginMm, 100);
-        }
-
-        public List<SphereModel> OptimizeSpherePlacement(Structure ptv, double sphereRadius, double centerSpacing, double boundaryMarginMm, int maxIterations)
-        {
-            var spheres = new List<SphereModel>();
-
-            try
+            var result = new LatticePackingResult
             {
-                var bounds = ptv.MeshGeometry.Bounds;
-                System.Diagnostics.Debug.WriteLine("Starting iterative grid search optimization...");
+                PackingMode = parameters.PackingMode,
+                AnchorCom = geometry != null ? geometry.CenterOfMass : default(Point3D)
+            };
 
-                var searchResult = PerformIterativeGridSearch(bounds, ptv, sphereRadius, centerSpacing, boundaryMarginMm, maxIterations);
-
-                if (searchResult.ValidCenters.Count > 0)
-                {
-                    for (int i = 0; i < searchResult.ValidCenters.Count; i++)
-                        spheres.Add(new SphereModel(searchResult.ValidCenters[i], sphereRadius, i + 1));
-
-                    System.Diagnostics.Debug.WriteLine($"Grid search completed: {spheres.Count} spheres at optimal shift ({searchResult.BestShift.x:F2}, {searchResult.BestShift.y:F2}, {searchResult.BestShift.z:F2})");
-                    System.Diagnostics.Debug.WriteLine($"Packing efficiency: {searchResult.PackingEfficiency:P1}");
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine("No valid sphere placements found");
-                }
-            }
-            catch (Exception ex)
+            if (geometry == null || parameters == null)
             {
-                System.Diagnostics.Debug.WriteLine($"Error in OptimizeSpherePlacement: {ex.Message}");
+                result.Message = "Geometry or parameters were not provided.";
+                return result;
             }
 
-            return spheres;
+            if (!geometry.IsValid)
+            {
+                result.Message = "V_valid is empty. No sphere centers can be placed.";
+                return result;
+            }
+
+            double radius = parameters.SphereRadiusMm;
+            double spacing = Math.Max(parameters.CenterSpacingMm, 2.0 * radius);
+            var hash = new SpatialHashGrid(spacing);
+            var occupied = new List<SphereModel>();
+
+            if (fixedSpheres != null)
+            {
+                foreach (var fixedSphere in fixedSpheres)
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (fixedSphere == null)
+                        continue;
+                    hash.Add(fixedSphere.Center);
+                    occupied.Add(fixedSphere);
+                }
+            }
+
+            IList<Point3D> candidates = BuildCandidateCenters(geometry, parameters, spacing);
+            result.CandidateCount = candidates.Count;
+
+            int index = occupied.Count + 1;
+            int maxCount = Math.Max(1, parameters.MaxSphereCount);
+
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                token.ThrowIfCancellationRequested();
+                if (occupied.Count >= maxCount)
+                    break;
+
+                Point3D center = candidates[i];
+                if (!IsStrictlyInsideValidVolume(center, geometry.ValidVolume))
+                {
+                    result.RejectedOutsideValid++;
+                    continue;
+                }
+
+                if (hash.HasNeighborWithin(center, spacing))
+                {
+                    result.RejectedCollision++;
+                    continue;
+                }
+
+                hash.Add(center);
+                occupied.Add(new SphereModel(center, radius, index));
+                index++;
+            }
+
+            result.Spheres = occupied;
+            result.PackingEfficiency = CalculatePackingEfficiency(occupied, radius, geometry.TargetBounds);
+            result.Message = occupied.Count == 0
+                ? "No valid sphere placements found inside V_valid."
+                : "Packed " + occupied.Count + " spheres using COM-anchored "
+                  + (parameters.PackingMode == PackingGeometryMode.HexagonalClosePacking ? "HCP/FCC" : "simple cubic")
+                  + " lattice.";
+            return result;
         }
 
-        public List<SphereModel> OptimizeSpherePlacement(Structure ptv, double sphereRadius, double centerSpacing, double boundaryMarginMm, int maxIterations, List<SphereModel> fixedSpheres)
+        public bool IsValidEditedSpherePosition(
+            Point3D candidateCenter,
+            SphereModel movingSphere,
+            IReadOnlyList<SphereModel> allSpheres,
+            VoxelMask validVolume,
+            double centerSpacingMm)
         {
-            var spheres = OptimizeSpherePlacement(ptv, sphereRadius, centerSpacing, boundaryMarginMm, maxIterations);
-            if (fixedSpheres == null || fixedSpheres.Count == 0)
-                return spheres;
-
-            return spheres
-                .Where(s => !OverlapsFixedSpheres(s, fixedSpheres, centerSpacing))
-                .ToList();
-        }
-
-        public bool IsValidEditedSpherePosition(VVector candidateCenter, SphereModel movingSphere, List<SphereModel> allSpheres, Structure ptv, double boundaryMarginMm, double centerSpacing)
-        {
-            if (!IsSphereCompletelyInsideTarget(candidateCenter, movingSphere.Radius, ptv, boundaryMarginMm))
+            if (movingSphere == null)
+                return false;
+            if (!IsStrictlyInsideValidVolume(candidateCenter, validVolume))
                 return false;
 
-            foreach (var sphere in allSpheres)
+            double minDistance = Math.Max(centerSpacingMm, 2.0 * movingSphere.Radius);
+            var hash = new SpatialHashGrid(minDistance);
+            for (int i = 0; i < allSpheres.Count; i++)
             {
-                if (sphere == movingSphere)
+                SphereModel sphere = allSpheres[i];
+                if (sphere == null || ReferenceEquals(sphere, movingSphere))
                     continue;
-
-                double minDistance = Math.Max(centerSpacing, movingSphere.Radius + sphere.Radius);
-                if (CalculateDistance(candidateCenter, sphere.Center) < minDistance)
-                    return false;
+                hash.Add(sphere.Center);
             }
 
-            return true;
+            return !hash.HasNeighborWithin(candidateCenter, minDistance);
         }
 
-        private bool OverlapsFixedSpheres(SphereModel sphere, List<SphereModel> fixedSpheres, double centerSpacing)
+        public static bool IsStrictlyInsideValidVolume(Point3D center, VoxelMask validVolume)
         {
-            foreach (var fixedSphere in fixedSpheres)
-            {
-                double minDistance = Math.Max(centerSpacing, sphere.Radius + fixedSphere.Radius);
-                if (CalculateDistance(sphere.Center, fixedSphere.Center) < minDistance)
-                    return true;
-            }
-
-            return false;
+            if (validVolume == null || validVolume.IsEmpty)
+                return false;
+            return validVolume.Contains(center);
         }
 
-        private GridSearchResult PerformIterativeGridSearch(Rect3D bounds, Structure ptv, double sphereRadius, double centerSpacing, double boundaryMarginMm, int maxIterations)
+        public IList<Point3D> BuildCandidateCenters(
+            LatticeGeometryContext geometry,
+            SFRTParameters parameters,
+            double spacing)
         {
-            var bestResult = new GridSearchResult();
+            var centers = new List<Point3D>();
+            LatticeTransform transform = geometry.Transform;
+            if (Math.Abs(transform.Rxx) + Math.Abs(transform.Ryy) + Math.Abs(transform.Rzz) < 1e-12)
+                transform = LatticeTransform.Identity(geometry.CenterOfMass);
 
-            double maxShift = Math.Min(centerSpacing, sphereRadius * 2);
-            int stepsPerAxis = (int)Math.Ceiling(Math.Pow(Math.Max(1, maxIterations), 1.0 / 3.0));
-            if (stepsPerAxis % 2 == 0)
-                stepsPerAxis++;
+            BoundingBox3D bounds = geometry.ValidVolume != null ? geometry.ValidVolume.Bounds : geometry.TargetBounds;
+            if (bounds.IsEmpty)
+                bounds = geometry.TargetBounds;
 
-            stepsPerAxis = Math.Max(1, stepsPerAxis);
-            double actualStepSize = stepsPerAxis == 1 ? 0 : (2 * maxShift) / (stepsPerAxis - 1);
-            int totalIterations = stepsPerAxis * stepsPerAxis * stepsPerAxis;
-            int iteration = 0;
+            double maxExtent = Math.Max(bounds.Diagonal, 1.0) + 2.0 * spacing;
+            int n = (int)Math.Ceiling(maxExtent / Math.Max(spacing * 0.5, 1.0)) + 2;
+            n = Math.Min(n, 80);
 
-            System.Diagnostics.Debug.WriteLine("Grid search parameters:");
-            System.Diagnostics.Debug.WriteLine($" Requested iterations: {maxIterations}");
-            System.Diagnostics.Debug.WriteLine($" Steps per axis: {stepsPerAxis}");
-            System.Diagnostics.Debug.WriteLine($" Actual iterations: {totalIterations}");
-            System.Diagnostics.Debug.WriteLine($" Max shift: ±{maxShift:F2} mm");
-            System.Diagnostics.Debug.WriteLine($" Step size: {actualStepSize:F2} mm");
-
-            for (int ix = 0; ix < stepsPerAxis; ix++)
-            {
-                double shiftX = stepsPerAxis == 1 ? 0 : -maxShift + ix * actualStepSize;
-
-                for (int iy = 0; iy < stepsPerAxis; iy++)
-                {
-                    double shiftY = stepsPerAxis == 1 ? 0 : -maxShift + iy * actualStepSize;
-
-                    for (int iz = 0; iz < stepsPerAxis; iz++)
-                    {
-                        double shiftZ = stepsPerAxis == 1 ? 0 : -maxShift + iz * actualStepSize;
-                        iteration++;
-
-                        var currentShift = new VVector(shiftX, shiftY, shiftZ);
-                        var shiftedCenters = GenerateShiftedHCPCenters(bounds, sphereRadius, centerSpacing, currentShift);
-                        var validCenters = FilterSpheresCompletelyInsideTarget(shiftedCenters, ptv, sphereRadius, boundaryMarginMm);
-                        double efficiency = CalculatePackingEfficiency(validCenters, sphereRadius, bounds);
-
-                        if (validCenters.Count > bestResult.SphereCount ||
-                            (validCenters.Count == bestResult.SphereCount && efficiency > bestResult.PackingEfficiency))
-                        {
-                            bestResult.ValidCenters = new List<VVector>(validCenters);
-                            bestResult.BestShift = currentShift;
-                            bestResult.SphereCount = validCenters.Count;
-                            bestResult.PackingEfficiency = efficiency;
-                        }
-
-                        if (iteration % Math.Max(totalIterations / 10, 1) == 0)
-                        {
-                            double progress = (double)iteration / totalIterations * 100;
-                            System.Diagnostics.Debug.WriteLine($"Grid search progress: {progress:F0}% (best so far: {bestResult.SphereCount} spheres)");
-                        }
-                    }
-                }
-            }
-
-            System.Diagnostics.Debug.WriteLine($"Grid search completed after {iteration} iterations");
-            return bestResult;
-        }
-
-        private List<VVector> GenerateShiftedHCPCenters(Rect3D bounds, double sphereRadius, double spacing, VVector shift)
-        {
-            var centers = new List<VVector>();
-
-            double diameter = sphereRadius * 2;
-            double actualSpacing = Math.Max(spacing, diameter);
-
-            double layerHeight = actualSpacing * Math.Sqrt(2.0 / 3.0);
-            double rowOffset = actualSpacing * Math.Sqrt(3) / 2;
-
-            double startX = bounds.X + sphereRadius + 1.0 + shift.x;
-            double endX = bounds.X + bounds.SizeX - sphereRadius - 1.0 + shift.x;
-            double startY = bounds.Y + sphereRadius + 1.0 + shift.y;
-            double endY = bounds.Y + bounds.SizeY - sphereRadius - 1.0 + shift.y;
-            double startZ = bounds.Z + sphereRadius + 1.0 + shift.z;
-            double endZ = bounds.Z + bounds.SizeZ - sphereRadius - 1.0 + shift.z;
-
-            int layerIndex = 0;
-
-            for (double z = startZ; z <= endZ; z += layerHeight)
-            {
-                bool isOddLayer = layerIndex % 2 == 1;
-                int rowIndex = 0;
-
-                for (double y = startY; y <= endY; y += rowOffset)
-                {
-                    bool isOddRow = rowIndex % 2 == 1;
-
-                    double xOffset = 0;
-                    if (isOddRow)
-                        xOffset += actualSpacing / 2;
-                    if (isOddLayer)
-                        xOffset += actualSpacing / 4;
-
-                    for (double x = startX + xOffset; x <= endX; x += actualSpacing)
-                    {
-                        centers.Add(new VVector(x, y, z));
-
-                        if (centers.Count > 3000)
-                            return centers;
-                    }
-
-                    rowIndex++;
-                }
-
-                layerIndex++;
-            }
+            if (parameters.PackingMode == PackingGeometryMode.SimpleCubic)
+                AppendSimpleCubic(centers, transform, bounds, spacing, n);
+            else
+                AppendHexagonalClosePacking(centers, transform, bounds, spacing, n);
 
             return centers;
         }
 
-        private List<VVector> FilterSpheresCompletelyInsideTarget(List<VVector> candidateCenters, Structure ptv, double sphereRadius, double boundaryMarginMm)
+        /// <summary>
+        /// Simple cubic lattice: (i, j, k) * d, origin at COM.
+        /// </summary>
+        public static void AppendSimpleCubic(
+            IList<Point3D> centers, LatticeTransform transform, BoundingBox3D bounds, double d, int n)
         {
-            var validCenters = new List<VVector>();
-
-            foreach (var center in candidateCenters)
+            for (int k = -n; k <= n; k++)
             {
-                try
+                for (int j = -n; j <= n; j++)
                 {
-                    if (IsSphereCompletelyInsideTarget(center, sphereRadius, ptv, boundaryMarginMm))
-                        validCenters.Add(center);
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Error validating center: {ex.Message}");
-                }
-            }
-
-            return validCenters;
-        }
-
-        public bool IsSphereCompletelyInsideTarget(VVector center, double radius, Structure ptv, double boundaryMarginMm)
-        {
-            try
-            {
-                if (!ptv.IsPointInsideSegment(center))
-                    return false;
-
-                double checkRadius = radius + boundaryMarginMm;
-                var samplingDirections = GetIcosahedronVertices();
-
-                foreach (var direction in samplingDirections)
-                {
-                    double magnitude = Math.Sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
-
-                    var normalizedDir = new VVector(
-                        direction.x / magnitude,
-                        direction.y / magnitude,
-                        direction.z / magnitude);
-
-                    var surfacePoint = new VVector(
-                        center.x + normalizedDir.x * checkRadius,
-                        center.y + normalizedDir.y * checkRadius,
-                        center.z + normalizedDir.z * checkRadius);
-
-                    if (!ptv.IsPointInsideSegment(surfacePoint))
-                        return false;
-                }
-
-                var cardinalPoints = new[]
-                {
-                    new VVector(center.x + checkRadius, center.y, center.z),
-                    new VVector(center.x - checkRadius, center.y, center.z),
-                    new VVector(center.x, center.y + checkRadius, center.z),
-                    new VVector(center.x, center.y - checkRadius, center.z),
-                    new VVector(center.x, center.y, center.z + checkRadius),
-                    new VVector(center.x, center.y, center.z - checkRadius)
-                };
-
-                foreach (var point in cardinalPoints)
-                {
-                    if (!ptv.IsPointInsideSegment(point))
-                        return false;
-                }
-
-                return true;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        }
-
-        public List<SphereModel> GenerateVoidSpheres(List<SphereModel> peakSpheres, Structure target, double boundaryMarginMm)
-        {
-            var voidSpheres = new List<SphereModel>();
-            if (peakSpheres == null || peakSpheres.Count < 2)
-                return voidSpheres;
-
-            int nextId = 1;
-            double baseRadius = peakSpheres.Min(s => s.Radius);
-            double minRadius = Math.Max(1.0, baseRadius * 0.5);
-
-            for (int i = 0; i < peakSpheres.Count; i++)
-            {
-                for (int j = i + 1; j < peakSpheres.Count; j++)
-                {
-                    var a = peakSpheres[i];
-                    var b = peakSpheres[j];
-
-                    double distance = CalculateDistance(a.Center, b.Center);
-                    double availableRadius = (distance - a.Radius - b.Radius) / 2.0;
-                    if (availableRadius < minRadius)
-                        continue;
-
-                    double radius = Math.Min(baseRadius, availableRadius);
-                    var center = new VVector(
-                        (a.Center.x + b.Center.x) / 2.0,
-                        (a.Center.y + b.Center.y) / 2.0,
-                        (a.Center.z + b.Center.z) / 2.0);
-
-                    while (radius >= minRadius)
+                    for (int i = -n; i <= n; i++)
                     {
-                        if (IsSphereCompletelyInsideTarget(center, radius, target, boundaryMarginMm) &&
-                            !OverlapsAnySphere(center, radius, peakSpheres) &&
-                            !OverlapsAnySphere(center, radius, voidSpheres))
-                        {
-                            voidSpheres.Add(new SphereModel(center, radius, nextId++));
-                            break;
-                        }
-
-                        radius -= 0.5;
+                        Point3D p = transform.ToPatient(i * d, j * d, k * d);
+                        if (bounds.Contains(p))
+                            centers.Add(p);
                     }
                 }
             }
-
-            return voidSpheres;
         }
 
-        private bool OverlapsAnySphere(VVector center, double radius, List<SphereModel> spheres)
+        /// <summary>
+        /// HCP packing with uniform nearest-neighbor spacing d.
+        /// In-plane hexagonal rows plus ABAB layer offset so that interlayer neighbors are also distance d:
+        /// x = i*d + (j mod 2)*d/2 + (k mod 2)*d/2
+        /// y = j*(√3/2)*d + (k mod 2)*d*√3/6
+        /// z = k*√(2/3)*d
+        /// </summary>
+        public static void AppendHexagonalClosePacking(
+            IList<Point3D> centers, LatticeTransform transform, BoundingBox3D bounds, double d, int n)
         {
-            foreach (var sphere in spheres)
+            double yPitch = d * Math.Sqrt(3.0) / 2.0;
+            double zPitch = d * Math.Sqrt(2.0 / 3.0);
+            double half = d * 0.5;
+            double layerY = d * Math.Sqrt(3.0) / 6.0;
+
+            for (int k = -n; k <= n; k++)
             {
-                if (CalculateDistance(center, sphere.Center) < radius + sphere.Radius)
-                    return true;
+                int kParity = k & 1;
+                for (int j = -n; j <= n; j++)
+                {
+                    int jParity = j & 1;
+                    double xOffset = (jParity + kParity) * half;
+                    double y = j * yPitch + kParity * layerY;
+                    double z = k * zPitch;
+                    for (int i = -n; i <= n; i++)
+                    {
+                        Point3D p = transform.ToPatient(i * d + xOffset, y, z);
+                        if (bounds.Contains(p))
+                            centers.Add(p);
+                    }
+                }
             }
-
-            return false;
         }
 
-        private List<VVector> GetIcosahedronVertices()
+        public static Point3D HexagonalLatticePoint(int i, int j, int k, double d)
         {
-            double phi = (1.0 + Math.Sqrt(5.0)) / 2.0;
-
-            return new List<VVector>
-            {
-                new VVector(-1, phi, 0), new VVector( 1, phi, 0),
-                new VVector(-1, -phi, 0), new VVector( 1, -phi, 0),
-                new VVector(0, -1, phi), new VVector(0, 1, phi),
-                new VVector(0, -1, -phi), new VVector(0, 1, -phi),
-                new VVector( phi, 0, -1), new VVector( phi, 0, 1),
-                new VVector(-phi, 0, -1), new VVector(-phi, 0, 1)
-            };
+            double half = d * 0.5;
+            int jParity = j & 1;
+            int kParity = k & 1;
+            double x = i * d + (jParity + kParity) * half;
+            double y = j * (Math.Sqrt(3.0) / 2.0) * d + kParity * d * Math.Sqrt(3.0) / 6.0;
+            double z = k * Math.Sqrt(2.0 / 3.0) * d;
+            return new Point3D(x, y, z);
         }
 
-        private double CalculatePackingEfficiency(List<VVector> centers, double sphereRadius, Rect3D bounds)
+        public static Point3D SimpleCubicLatticePoint(int i, int j, int k, double d)
         {
-            if (centers.Count == 0)
+            return new Point3D(i * d, j * d, k * d);
+        }
+
+        private static double CalculatePackingEfficiency(IList<SphereModel> spheres, double radius, BoundingBox3D bounds)
+        {
+            if (spheres == null || spheres.Count == 0)
                 return 0;
-
-            double sphereVolume = (4.0 / 3.0) * Math.PI * Math.Pow(sphereRadius, 3);
-            double totalSphereVolume = centers.Count * sphereVolume;
+            double sphereVolume = (4.0 / 3.0) * Math.PI * radius * radius * radius;
             double boundsVolume = bounds.SizeX * bounds.SizeY * bounds.SizeZ;
-
-            return totalSphereVolume / boundsVolume;
-        }
-
-        public double CalculateHCPPackingDensity(List<SphereModel> spheres, Rect3D bounds)
-        {
-            if (spheres.Count == 0)
+            if (boundsVolume <= 0)
                 return 0;
-
-            double totalSphereVolume = spheres.Count * (4.0 / 3.0) * Math.PI * Math.Pow(spheres[0].Radius, 3);
-            double boundsVolume = bounds.SizeX * bounds.SizeY * bounds.SizeZ;
-
-            return totalSphereVolume / boundsVolume;
-        }
-
-        private double CalculateDistance(VVector point1, VVector point2)
-        {
-            return Math.Sqrt(
-                Math.Pow(point1.x - point2.x, 2) +
-                Math.Pow(point1.y - point2.y, 2) +
-                Math.Pow(point1.z - point2.z, 2));
+            return spheres.Count * sphereVolume / boundsVolume;
         }
     }
 }

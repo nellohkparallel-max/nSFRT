@@ -1,0 +1,19 @@
+using System.Collections.Generic;
+
+namespace SFRThelper.Models
+{
+    public class StructureCreationResult
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; }
+        public List<string> CreatedStructureIds { get; set; }
+        public string CompositePeaksId { get; set; }
+        public string ValleyId { get; set; }
+        public bool RolledBack { get; set; }
+
+        public StructureCreationResult()
+        {
+            CreatedStructureIds = new List<string>();
+        }
+    }
+}
