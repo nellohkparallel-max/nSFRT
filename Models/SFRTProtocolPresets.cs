@@ -119,6 +119,11 @@ namespace SFRThelper.Models
                 parameters.TargetClearanceMm = preset.TargetMarginMm;
                 parameters.PackingMode = preset.SuggestedPacking;
                 parameters.IsDirectionalSpacing = false;
+
+                PoObjectiveProfile po = OptimizationObjectivePresets.Find((PoObjectivePreset)(int)id);
+                parameters.PoObjectivePreset = po.Id;
+                parameters.ValleyUpperPercentOfRx = po.ValleyUpperFraction * 100.0;
+                parameters.PenumbraUpperPercentOfRx = po.PenumbraUpperFraction * 100.0;
             }
             finally
             {

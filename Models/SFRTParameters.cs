@@ -44,6 +44,19 @@ namespace SFRThelper.Models
         private ClinicalProtocolPreset _preset = ClinicalProtocolPreset.Custom;
         private bool _isDirectionalSpacing;
         private bool _applyingPreset;
+        private bool _generateTuningStructures = true;
+        private double _penumbraShellThicknessMm = 3.0;
+        private double _concentricRing1Mm = 10.0;
+        private double _concentricRing2Mm = 30.0;
+        private double _prescriptionDoseGy = 20.0;
+        private int _fractionCount = 1;
+        private PoObjectivePreset _poObjectivePreset = PoObjectivePreset.UniversityOfMiami;
+        private bool _autoEnableJawTracking = true;
+        private bool _clearExistingObjectives = true;
+        private double _valleyUpperPercentOfRx = 30.0;
+        private double _penumbraUpperPercentOfRx = 55.0;
+        private double _oar1DoseLimitGy = 14.0;
+        private double _oar2DoseLimitGy = 14.0;
         private readonly Dictionary<string, List<string>> _errors = new Dictionary<string, List<string>>();
 
         public double SphereRadiusMm
@@ -440,6 +453,189 @@ namespace SFRThelper.Models
             set { Oar2ClearanceMm = value; }
         }
 
+        public bool GenerateTuningStructures
+        {
+            get { return _generateTuningStructures; }
+            set
+            {
+                if (_generateTuningStructures == value)
+                    return;
+                _generateTuningStructures = value;
+                OnPropertyChanged(nameof(GenerateTuningStructures));
+                ValidateAll();
+            }
+        }
+
+        /// <summary>d_shell / d_margin for Peak_Penumbra and Valley_Core (mm). Default 3.0, range 1–5.</summary>
+        public double PenumbraShellThicknessMm
+        {
+            get { return _penumbraShellThicknessMm; }
+            set
+            {
+                if (NearlyEqual(_penumbraShellThicknessMm, value))
+                    return;
+                _penumbraShellThicknessMm = value;
+                OnPropertyChanged(nameof(PenumbraShellThicknessMm));
+                ValidateAll();
+            }
+        }
+
+        public double ConcentricRing1Mm
+        {
+            get { return _concentricRing1Mm; }
+            set
+            {
+                if (NearlyEqual(_concentricRing1Mm, value))
+                    return;
+                _concentricRing1Mm = value;
+                OnPropertyChanged(nameof(ConcentricRing1Mm));
+                ValidateAll();
+            }
+        }
+
+        public double ConcentricRing2Mm
+        {
+            get { return _concentricRing2Mm; }
+            set
+            {
+                if (NearlyEqual(_concentricRing2Mm, value))
+                    return;
+                _concentricRing2Mm = value;
+                OnPropertyChanged(nameof(ConcentricRing2Mm));
+                ValidateAll();
+            }
+        }
+
+        public double PrescriptionDoseGy
+        {
+            get { return _prescriptionDoseGy; }
+            set
+            {
+                if (NearlyEqual(_prescriptionDoseGy, value))
+                    return;
+                _prescriptionDoseGy = value;
+                OnPropertyChanged(nameof(PrescriptionDoseGy));
+                ValidateAll();
+            }
+        }
+
+        public int FractionCount
+        {
+            get { return _fractionCount; }
+            set
+            {
+                if (_fractionCount == value)
+                    return;
+                _fractionCount = value;
+                OnPropertyChanged(nameof(FractionCount));
+                ValidateAll();
+            }
+        }
+
+        /// <summary>Legacy alias for <see cref="FractionCount"/>.</summary>
+        public int Fractions
+        {
+            get { return FractionCount; }
+            set { FractionCount = value; }
+        }
+
+        public PoObjectivePreset PoObjectivePreset
+        {
+            get { return _poObjectivePreset; }
+            set
+            {
+                if (_poObjectivePreset == value)
+                    return;
+                _poObjectivePreset = value;
+                OnPropertyChanged(nameof(PoObjectivePreset));
+            }
+        }
+
+        public bool AutoEnableJawTracking
+        {
+            get { return _autoEnableJawTracking; }
+            set
+            {
+                if (_autoEnableJawTracking == value)
+                    return;
+                _autoEnableJawTracking = value;
+                OnPropertyChanged(nameof(AutoEnableJawTracking));
+            }
+        }
+
+        public bool ClearExistingObjectives
+        {
+            get { return _clearExistingObjectives; }
+            set
+            {
+                if (_clearExistingObjectives == value)
+                    return;
+                _clearExistingObjectives = value;
+                OnPropertyChanged(nameof(ClearExistingObjectives));
+                OnPropertyChanged(nameof(AppendObjectives));
+            }
+        }
+
+        public bool AppendObjectives
+        {
+            get { return !_clearExistingObjectives; }
+            set { ClearExistingObjectives = !value; }
+        }
+
+        public double ValleyUpperPercentOfRx
+        {
+            get { return _valleyUpperPercentOfRx; }
+            set
+            {
+                if (NearlyEqual(_valleyUpperPercentOfRx, value))
+                    return;
+                _valleyUpperPercentOfRx = value;
+                OnPropertyChanged(nameof(ValleyUpperPercentOfRx));
+                MarkPoCustomIfEdited();
+                ValidateAll();
+            }
+        }
+
+        public double PenumbraUpperPercentOfRx
+        {
+            get { return _penumbraUpperPercentOfRx; }
+            set
+            {
+                if (NearlyEqual(_penumbraUpperPercentOfRx, value))
+                    return;
+                _penumbraUpperPercentOfRx = value;
+                OnPropertyChanged(nameof(PenumbraUpperPercentOfRx));
+                MarkPoCustomIfEdited();
+                ValidateAll();
+            }
+        }
+
+        public double Oar1DoseLimitGy
+        {
+            get { return _oar1DoseLimitGy; }
+            set
+            {
+                if (NearlyEqual(_oar1DoseLimitGy, value))
+                    return;
+                _oar1DoseLimitGy = value;
+                OnPropertyChanged(nameof(Oar1DoseLimitGy));
+                ValidateAll();
+            }
+        }
+
+        public double Oar2DoseLimitGy
+        {
+            get { return _oar2DoseLimitGy; }
+            set
+            {
+                if (NearlyEqual(_oar2DoseLimitGy, value))
+                    return;
+                _oar2DoseLimitGy = value;
+                OnPropertyChanged(nameof(Oar2DoseLimitGy));
+                ValidateAll();
+            }
+        }
+
         public void BeginPresetApply()
         {
             _applyingPreset = true;
@@ -450,6 +646,7 @@ namespace SFRThelper.Models
             _applyingPreset = false;
             ValidateAll();
             OnPropertyChanged(nameof(Preset));
+            OnPropertyChanged(nameof(PoObjectivePreset));
         }
 
         public double EdgeToEdgeClearanceMm
@@ -551,6 +748,13 @@ namespace SFRThelper.Models
             ValidateProperty(nameof(MaxIterations), ValidateMaxIterations);
             ValidateProperty(nameof(Oar1StructureId), ValidateOars);
             ValidateProperty(nameof(Oar2StructureId), ValidateOars);
+            ValidateProperty(nameof(PenumbraShellThicknessMm), ValidatePenumbraShell);
+            ValidateProperty(nameof(ConcentricRing1Mm), ValidateRings);
+            ValidateProperty(nameof(ConcentricRing2Mm), ValidateRings);
+            ValidateProperty(nameof(PrescriptionDoseGy), ValidatePrescription);
+            ValidateProperty(nameof(FractionCount), ValidateFractions);
+            ValidateProperty(nameof(Oar1DoseLimitGy), () => ValidateNonNegative(Oar1DoseLimitGy, "OAR 1 Dmax"));
+            ValidateProperty(nameof(Oar2DoseLimitGy), () => ValidateNonNegative(Oar2DoseLimitGy, "OAR 2 Dmax"));
         }
 
         private List<string> ValidateTarget()
@@ -604,6 +808,50 @@ namespace SFRThelper.Models
                 _preset = ClinicalProtocolPreset.Custom;
                 OnPropertyChanged(nameof(Preset));
             }
+        }
+
+        private void MarkPoCustomIfEdited()
+        {
+            if (_applyingPreset)
+                return;
+            if (_poObjectivePreset != PoObjectivePreset.Custom)
+            {
+                _poObjectivePreset = PoObjectivePreset.Custom;
+                OnPropertyChanged(nameof(PoObjectivePreset));
+            }
+        }
+
+        private List<string> ValidatePenumbraShell()
+        {
+            if (double.IsNaN(PenumbraShellThicknessMm) || PenumbraShellThicknessMm < 1.0 - 1e-9 || PenumbraShellThicknessMm > 5.0 + 1e-9)
+                return new List<string> { "Penumbra shell thickness must be between 1.0 and 5.0 mm." };
+            return null;
+        }
+
+        private List<string> ValidateRings()
+        {
+            var errors = new List<string>();
+            if (double.IsNaN(ConcentricRing1Mm) || ConcentricRing1Mm <= 0)
+                errors.Add("Inner concentric ring radius must be greater than 0 mm.");
+            if (double.IsNaN(ConcentricRing2Mm) || ConcentricRing2Mm <= 0)
+                errors.Add("Outer concentric ring radius must be greater than 0 mm.");
+            if (ConcentricRing2Mm <= ConcentricRing1Mm + 1e-6)
+                errors.Add("Outer ring (Ring 2) must be larger than inner ring (Ring 1).");
+            return errors.Count == 0 ? null : errors;
+        }
+
+        private List<string> ValidatePrescription()
+        {
+            if (double.IsNaN(PrescriptionDoseGy) || PrescriptionDoseGy <= 0)
+                return new List<string> { "Prescription dose (D_rx) must be greater than 0 Gy." };
+            return null;
+        }
+
+        private List<string> ValidateFractions()
+        {
+            if (FractionCount < 1)
+                return new List<string> { "Fraction count (N_fx) must be at least 1." };
+            return null;
         }
 
         private List<string> ValidateNonNegative(double value, string label)

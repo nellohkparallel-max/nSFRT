@@ -39,6 +39,8 @@ namespace SFRThelper.ViewModels
         private double _viewMinY;
         private double _viewScale = 1.0;
         private string _maximizationStatusText = "Maximize sphere count to search phase shifts inside the unit cell.";
+        private bool _hasPhotonSeedingStructures;
+        private bool _hasActivePlanSetup;
         private const double ViewPadding = 20.0;
 
         public SFRTParameters Parameters { get; private set; }
@@ -56,6 +58,7 @@ namespace SFRThelper.ViewModels
         public IReadOnlyList<ProtocolOption> ProtocolOptions { get; private set; }
         public IReadOnlyList<SpacingModeOption> SpacingModeOptions { get; private set; }
         public IReadOnlyList<MaximizationStrategyOption> MaximizationStrategyOptions { get; private set; }
+        public IReadOnlyList<PoObjectivePresetOption> PoObjectivePresetOptions { get; private set; }
 
         public MainViewModel(IESAPIService esapi)
         {
@@ -105,6 +108,11 @@ namespace SFRThelper.ViewModels
                 new MaximizationStrategyOption { Value = SphereMaximizationStrategy.RigidPhaseShift, Display = "Rigid Phase-Shift Search" },
                 new MaximizationStrategyOption { Value = SphereMaximizationStrategy.ParticleRelaxation, Display = "Particle Relaxation" }
             };
+            PoObjectivePresetOptions = OptimizationObjectivePresets.All.Select(p => new PoObjectivePresetOption
+            {
+                Value = p.Id,
+                Display = p.DisplayName
+            }).ToList();
 
             PreviewLatticeCommand = new AsyncRelayCommand(PreviewLatticeAsync, () => CanPreview);
             GenerateStructuresCommand = new AsyncRelayCommand(GenerateSpheresAndRingsAsync, () => CanGenerateSpheresAndRings);
@@ -114,7 +122,8 @@ namespace SFRThelper.ViewModels
             RegenerateRemainingCommand = new AsyncRelayCommand(RegenerateRemainingAsync, () => CanRegenerateRemaining);
             EvaluatePlanCommand = new AsyncRelayCommand(EvaluatePlanAsync, () => CanEvaluate);
             RefreshPlansCommand = new RelayCommand(LoadPlans);
-            SeedObjectivesCommand = new AsyncRelayCommand(SeedObjectivesAsync, () => CanAutomate);
+            SeedObjectivesCommand = new AsyncRelayCommand(SeedObjectivesAsync, () => CanSeedPoObjectives);
+            SeedPoObjectivesCommand = SeedObjectivesCommand;
             SetupVmatArcsCommand = new AsyncRelayCommand(SetupVmatArcsAsync, () => CanAutomate);
             ExportQaReportCommand = new RelayCommand(ExportQaReport, () => CanExportQa);
 
@@ -141,6 +150,7 @@ namespace SFRThelper.ViewModels
                 OnPropertyChanged(nameof(CanRegenerateRemaining));
                 OnPropertyChanged(nameof(CanEvaluate));
                 OnPropertyChanged(nameof(CanAutomate));
+                OnPropertyChanged(nameof(CanSeedPoObjectives));
                 OnPropertyChanged(nameof(CanExportQa));
                 OnPropertyChanged(nameof(IsIdle));
                 CommandManager.InvalidateRequerySuggested();
@@ -193,6 +203,21 @@ namespace SFRThelper.ViewModels
             get { return !IsBusy; }
         }
 
+        public bool CanSeedPoObjectives
+        {
+            get
+            {
+                bool hasPlan = _hasActivePlanSetup
+                    || (SelectedPlan != null && !SelectedPlan.IsPlanSum);
+                return !IsBusy
+                    && OptimizationObjectivePresets.CanSeed(
+                        Parameters,
+                        hasPlan,
+                        _hasPhotonSeedingStructures,
+                        _hasPhotonSeedingStructures);
+            }
+        }
+
         public bool CanExportQa
         {
             get { return !IsBusy && Evaluation != null && Evaluation.Success; }
@@ -233,6 +258,18 @@ namespace SFRThelper.ViewModels
             {
                 SFRTProtocolPreset preset = SFRTProtocolPresets.Find(Parameters.Preset);
                 return preset != null ? preset.Description : string.Empty;
+            }
+        }
+
+        public PoObjectivePreset SelectedPoObjectivePreset
+        {
+            get { return Parameters.PoObjectivePreset; }
+            set
+            {
+                if (Parameters.PoObjectivePreset == value)
+                    return;
+                OptimizationObjectivePresets.Apply(Parameters, value);
+                OnPropertyChanged(nameof(SelectedPoObjectivePreset));
             }
         }
 
@@ -306,6 +343,7 @@ namespace SFRThelper.ViewModels
                     return;
                 OnPropertyChanged(nameof(CanEvaluate));
                 OnPropertyChanged(nameof(IsPlanCalculated));
+                OnPropertyChanged(nameof(CanSeedPoObjectives));
                 CommandManager.InvalidateRequerySuggested();
             }
         }
@@ -395,6 +433,7 @@ namespace SFRThelper.ViewModels
         public ICommand EvaluatePlanCommand { get; private set; }
         public ICommand RefreshPlansCommand { get; private set; }
         public ICommand SeedObjectivesCommand { get; private set; }
+        public ICommand SeedPoObjectivesCommand { get; private set; }
         public ICommand SetupVmatArcsCommand { get; private set; }
         public ICommand ExportQaReportCommand { get; private set; }
 
@@ -413,6 +452,16 @@ namespace SFRThelper.ViewModels
 
             LoadPlans();
             OnTargetChanged();
+            RefreshSeedingGuards();
+        }
+
+        private void RefreshSeedingGuards()
+        {
+            _hasPhotonSeedingStructures = CallEsapi(() => _esapi.HasPhotonSeedingStructures());
+            _hasActivePlanSetup = CallEsapi(() => _esapi.HasActivePlanSetup())
+                || AvailablePlans.Any(p => p != null && !p.IsPlanSum);
+            OnPropertyChanged(nameof(CanSeedPoObjectives));
+            CommandManager.InvalidateRequerySuggested();
         }
 
         private void LoadPlans()
@@ -433,11 +482,15 @@ namespace SFRThelper.ViewModels
             OnPropertyChanged(nameof(CanPreview));
             OnPropertyChanged(nameof(CanCreateStructures));
             OnPropertyChanged(nameof(CanGenerateSpheresAndRings));
+            OnPropertyChanged(nameof(CanSeedPoObjectives));
             if (e.PropertyName == nameof(SFRTParameters.Preset))
             {
                 OnPropertyChanged(nameof(SelectedPreset));
                 OnPropertyChanged(nameof(PresetDescription));
+                OnPropertyChanged(nameof(SelectedPoObjectivePreset));
             }
+            if (e.PropertyName == nameof(SFRTParameters.PoObjectivePreset))
+                OnPropertyChanged(nameof(SelectedPoObjectivePreset));
             if (e.PropertyName == nameof(SFRTParameters.IsDirectionalSpacing))
                 OnPropertyChanged(nameof(SelectedDirectionalSpacing));
             CommandManager.InvalidateRequerySuggested();
@@ -476,6 +529,7 @@ namespace SFRThelper.ViewModels
             OnPropertyChanged(nameof(CanPreview));
             OnPropertyChanged(nameof(CanCreateStructures));
             OnPropertyChanged(nameof(CanGenerateSpheresAndRings));
+            OnPropertyChanged(nameof(CanSeedPoObjectives));
             CommandManager.InvalidateRequerySuggested();
         }
 
@@ -641,7 +695,7 @@ namespace SFRThelper.ViewModels
             var progress = new Progress<string>(m => StatusMessage = m);
             try
             {
-                StatusMessage = "Phase 3: committing Peak / Lattice_Peaks / Lattice_Valley / rings...";
+                StatusMessage = "Phase 3: committing Peak / Lattice_Peaks / Lattice_Valley / tuning structures...";
                 var spheres = GeneratedSpheres.ToList();
                 SFRTParameters parameters = Parameters;
                 WorkProgress = 20;
@@ -715,6 +769,19 @@ namespace SFRThelper.ViewModels
 
         private async Task SeedObjectivesAsync()
         {
+            if (!CanSeedPoObjectives)
+            {
+                if (SelectedPlan != null && SelectedPlan.IsPlanSum)
+                    StatusMessage = "PO seeding requires an ExternalPlanSetup, not a PlanSum.";
+                else if (!_hasPhotonSeedingStructures)
+                    StatusMessage = "Generate Lattice_Peaks and Valley_Core (or Lattice_Valley) before seeding PO objectives.";
+                else if (Parameters.PrescriptionDoseGy <= 0 || Parameters.FractionCount < 1)
+                    StatusMessage = "Set D_rx > 0 Gy and N_fx ≥ 1 before seeding PO objectives.";
+                else
+                    StatusMessage = "Open a writable photon PlanSetup before seeding PO objectives.";
+                return;
+            }
+
             IsBusy = true;
             try
             {

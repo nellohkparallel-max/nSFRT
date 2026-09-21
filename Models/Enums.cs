@@ -33,4 +33,13 @@ namespace SFRThelper.Models
         RigidPhaseShift = 0,
         ParticleRelaxation = 1
     }
+
+    public enum PoObjectivePreset
+    {
+        Custom = 0,
+        UniversityOfMiami = 1,
+        MayoClinic = 2,
+        Valencia = 3,
+        MiniLattice = 4
+    }
 }

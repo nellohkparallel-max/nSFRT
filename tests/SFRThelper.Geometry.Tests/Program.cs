@@ -30,6 +30,11 @@ namespace SFRThelper.Geometry.Tests
             Run("Directional SI spacing is independent of dxy", TestDirectionalSpacing);
             Run("Miami / Mayo / Valencia / Mini-Lattice presets", TestProtocolPresets);
             Run("TG-263 Peak ids, rings, and 16-character limit", TestStructureNaming);
+            Run("Penumbra shell, Valley_Core, and ring IDs fit Eclipse 16 chars", TestTuningStructureIds);
+            Run("Penumbra 1–5 mm and outer ring > inner ring", TestTuningParameterValidation);
+            Run("Miami / Mayo / Mini-Lattice PO valley and penumbra fractions", TestPoObjectivePresets);
+            Run("PO Build doses match Rx and protocol fractions", TestPoBuildDoses);
+            Run("Seed CanExecute requires PlanSetup, peaks, valley, Rx, and Nfx", TestCanSeedGuards);
             Run("Transaction rollback is sequential reverse order", TestTransactionRollback);
             Run("PVDR and volume-fraction flags", TestMetrics);
             Run("gEUD from cumulative DVH bins", TestGeud);
@@ -241,6 +246,8 @@ namespace SFRThelper.Geometry.Tests
             AssertNear(p.CenterSpacingMm, 30, 1e-9, "Miami spacing");
             AssertNear(p.TargetInternalMarginMm, 10, 1e-9, "Miami margin");
             AssertTrue(p.Preset == ClinicalProtocolPreset.UniversityOfMiami, "Miami preset id");
+            AssertTrue(p.PoObjectivePreset == PoObjectivePreset.UniversityOfMiami, "Miami PO preset");
+            AssertNear(p.ValleyUpperPercentOfRx, 30, 1e-9, "Miami valley 30%");
 
             SFRTProtocolPresets.Apply(p, ClinicalProtocolPreset.MayoClinic);
             AssertNear(p.SphereDiameterMm, 10, 1e-9, "Mayo D");
@@ -254,6 +261,8 @@ namespace SFRThelper.Geometry.Tests
             SFRTProtocolPresets.Apply(p, ClinicalProtocolPreset.MiniLattice);
             AssertNear(p.SphereDiameterMm, 6, 1e-9, "Mini D");
             AssertNear(p.CenterSpacingMm, 12, 1e-9, "Mini spacing");
+            AssertTrue(p.PoObjectivePreset == PoObjectivePreset.MiniLattice, "Mini PO preset follows geometry");
+            AssertNear(p.ValleyUpperPercentOfRx, 40, 1e-9, "Mini valley 40%");
 
             p.SphereDiameterMm = 8;
             AssertTrue(p.Preset == ClinicalProtocolPreset.Custom, "edit marks Custom");
@@ -271,10 +280,125 @@ namespace SFRThelper.Geometry.Tests
             AssertTrue(StructureNaming.Ring13Id == "Ring_SFRT_1-3cm", "ring 1-3");
             AssertTrue(StructureNaming.Ring01Id.Length <= 16, "ring 0-1 length");
             AssertTrue(StructureNaming.Ring13Id.Length <= 16, "ring 1-3 length");
+            AssertTrue(StructureNaming.PenumbraShellId == "Peak_Penumbra", "Peak_Penumbra_Shell truncated");
+            AssertTrue(StructureNaming.PenumbraShellId.Length <= StructureNaming.MaxIdLength, "Peak_Penumbra length");
+            AssertTrue(StructureNaming.ValleyCoreId == "Valley_Core", "Valley_Core id");
+            AssertTrue(StructureNaming.ValleyCoreId.Length <= StructureNaming.MaxIdLength, "Valley_Core length");
+            AssertTrue("Peak_Penumbra_Shell".Length > StructureNaming.MaxIdLength, "full penumbra name exceeds Eclipse");
             var existing = new HashSet<string> { "Lattice_Peaks" };
             string next = StructureNaming.NextAvailable("Lattice_Peaks", existing);
             AssertTrue(next != "Lattice_Peaks", "unique id");
             AssertTrue(next.Length <= 16, "unique id length");
+        }
+
+        private static void TestTuningStructureIds()
+        {
+            AssertTrue(StructureNaming.PenumbraShellId == "Peak_Penumbra", "clinical 16-char Peak_Penumbra");
+            AssertTrue(StructureNaming.PenumbraShellId.Length <= StructureNaming.MaxIdLength, "Peak_Penumbra fits");
+            AssertTrue(StructureNaming.Truncate("Peak_Penumbra_Shell").Length == StructureNaming.MaxIdLength, "raw Peak_Penumbra_Shell truncates to 16");
+            AssertTrue(StructureNaming.DicomControl == "CONTROL", "CONTROL type");
+            AssertTrue(StructureNaming.DicomAvoidance == "AVOIDANCE", "AVOIDANCE type");
+        }
+
+        private static void TestTuningParameterValidation()
+        {
+            var p = new SFRTParameters { SelectedTargetId = "GTV", SphereRadiusMm = 5, CenterSpacingMm = 15 };
+            AssertTrue(p.GenerateTuningStructures, "tuning on by default");
+            AssertNear(p.PenumbraShellThicknessMm, 3.0, 1e-9, "default shell");
+            AssertNear(p.ConcentricRing1Mm, 10.0, 1e-9, "default ring1");
+            AssertNear(p.ConcentricRing2Mm, 30.0, 1e-9, "default ring2");
+            AssertTrue(p.IsValid, "defaults valid");
+
+            p.PenumbraShellThicknessMm = 0.5;
+            AssertTrue(!p.IsValid, "shell < 1 mm");
+            p.PenumbraShellThicknessMm = 6.0;
+            AssertTrue(!p.IsValid, "shell > 5 mm");
+            p.PenumbraShellThicknessMm = 3.0;
+            AssertTrue(p.IsValid, "shell restored");
+
+            p.ConcentricRing2Mm = 8.0;
+            AssertTrue(!p.IsValid, "ring2 must exceed ring1");
+            p.ConcentricRing2Mm = 30.0;
+            AssertTrue(p.IsValid, "rings restored");
+
+            p.PrescriptionDoseGy = 0;
+            AssertTrue(!p.IsValid, "Rx must be > 0");
+            p.PrescriptionDoseGy = 20;
+            p.FractionCount = 0;
+            AssertTrue(!p.IsValid, "Nfx must be >= 1");
+            p.FractionCount = 1;
+            AssertTrue(p.IsValid, "Rx/fx restored");
+        }
+
+        private static void TestPoObjectivePresets()
+        {
+            var p = new SFRTParameters { SelectedTargetId = "GTV" };
+            OptimizationObjectivePresets.Apply(p, PoObjectivePreset.UniversityOfMiami);
+            AssertNear(p.ValleyUpperPercentOfRx, 30, 1e-9, "Miami valley 30");
+            AssertNear(p.PenumbraUpperPercentOfRx, 55, 1e-9, "Miami penumbra 55");
+
+            OptimizationObjectivePresets.Apply(p, PoObjectivePreset.MayoClinic);
+            AssertNear(p.ValleyUpperPercentOfRx, 35, 1e-9, "Mayo valley 35");
+            AssertNear(p.PenumbraUpperPercentOfRx, 60, 1e-9, "Mayo penumbra 60");
+
+            OptimizationObjectivePresets.Apply(p, PoObjectivePreset.Valencia);
+            AssertNear(p.ValleyUpperPercentOfRx, 30, 1e-9, "Valencia valley 30");
+
+            OptimizationObjectivePresets.Apply(p, PoObjectivePreset.MiniLattice);
+            AssertNear(p.ValleyUpperPercentOfRx, 40, 1e-9, "Mini valley 40");
+            AssertNear(p.PenumbraUpperPercentOfRx, 60, 1e-9, "Mini penumbra 60");
+        }
+
+        private static void TestPoBuildDoses()
+        {
+            var p = new SFRTParameters { SelectedTargetId = "GTV" };
+            p.PrescriptionDoseGy = 20.0;
+            p.FractionCount = 1;
+            OptimizationObjectivePresets.Apply(p, PoObjectivePreset.UniversityOfMiami);
+            IList<PoPointObjective> miami = OptimizationObjectivePresets.Build(p);
+            PoPointObjective peaks = miami.First(o => o.Role == "Lattice_Peaks");
+            PoPointObjective valley = miami.First(o => o.Role == "Valley_Core");
+            PoPointObjective shell = miami.First(o => o.Role == "Peak_Penumbra_Shell");
+            PoPointObjective ring01 = miami.First(o => o.Role == "Ring_SFRT_0-1cm");
+            PoPointObjective ring13 = miami.First(o => o.Role == "Ring_SFRT_1-3cm");
+            AssertTrue(peaks.IsLower && peaks.VolumePercent == 99.0 && peaks.Priority == 120, "peaks lower V99 pri 120");
+            AssertNear(peaks.DoseGy, 20.0, 1e-9, "peaks 100% Rx");
+            AssertNear(valley.DoseGy, 6.0, 1e-9, "Miami valley 30% of 20");
+            AssertTrue(!valley.IsLower && valley.VolumePercent == 0.0, "valley upper V0");
+            AssertNear(shell.DoseGy, 11.0, 1e-9, "Miami penumbra 55% of 20");
+            AssertNear(ring01.DoseGy, 9.0, 1e-9, "ring 0-1 45% of 20");
+            AssertNear(ring13.DoseGy, 5.0, 1e-9, "ring 1-3 25% of 20");
+
+            OptimizationObjectivePresets.Apply(p, PoObjectivePreset.MayoClinic);
+            IList<PoPointObjective> mayo = OptimizationObjectivePresets.Build(p);
+            AssertNear(mayo.First(o => o.Role == "Valley_Core").DoseGy, 7.0, 1e-9, "Mayo valley 35% of 20");
+            AssertNear(mayo.First(o => o.Role == "Peak_Penumbra_Shell").DoseGy, 12.0, 1e-9, "Mayo penumbra 60% of 20");
+
+            OptimizationObjectivePresets.Apply(p, PoObjectivePreset.MiniLattice);
+            IList<PoPointObjective> mini = OptimizationObjectivePresets.Build(p);
+            AssertNear(mini.First(o => o.Role == "Valley_Core").DoseGy, 8.0, 1e-9, "Mini valley 40% of 20");
+
+            p.Oar1StructureId = "Cord";
+            p.Oar1DoseLimitGy = 12.0;
+            IList<PoPointObjective> withOar = OptimizationObjectivePresets.Build(p);
+            PoPointObjective oar = withOar.First(o => o.Role == "OAR Avoidance 1");
+            AssertNear(oar.DoseGy, 12.0, 1e-9, "OAR Dmax");
+            AssertTrue(!oar.IsLower && oar.VolumePercent == 0.0, "OAR upper V0");
+        }
+
+        private static void TestCanSeedGuards()
+        {
+            var p = new SFRTParameters { SelectedTargetId = "GTV", PrescriptionDoseGy = 20, FractionCount = 1 };
+            AssertTrue(OptimizationObjectivePresets.CanSeed(p, true, true, true), "all guards met");
+            AssertTrue(!OptimizationObjectivePresets.CanSeed(p, false, true, true), "needs PlanSetup");
+            AssertTrue(!OptimizationObjectivePresets.CanSeed(p, true, false, true), "needs Lattice_Peaks");
+            AssertTrue(!OptimizationObjectivePresets.CanSeed(p, true, true, false), "needs Valley_Core or Lattice_Valley");
+            p.PrescriptionDoseGy = 0;
+            AssertTrue(!OptimizationObjectivePresets.CanSeed(p, true, true, true), "needs Rx > 0");
+            p.PrescriptionDoseGy = 20;
+            p.FractionCount = 0;
+            AssertTrue(!OptimizationObjectivePresets.CanSeed(p, true, true, true), "needs Nfx >= 1");
+            AssertTrue(!OptimizationObjectivePresets.CanSeed(null, true, true, true), "null parameters");
         }
 
         private static void TestTransactionRollback()
@@ -286,6 +410,9 @@ namespace SFRThelper.Geometry.Tests
             var order = tx.RollbackOrder().ToList();
             AssertTrue(order.Count == 3, "count");
             AssertTrue(order[0] == "Lattice_Peaks" && order[2] == "Peak_01", "reverse sequential rollback");
+            tx.Untrack("Lattice_Peaks");
+            var after = tx.RollbackOrder().ToList();
+            AssertTrue(after.Count == 2 && after[0] == "Peak_02", "untrack removes from rollback");
         }
 
         private static void TestMetrics()
@@ -496,6 +623,8 @@ namespace SFRThelper.Geometry.Tests
             public IEsapiWorker Worker { get { return null; } }
             public string SetupVmatArcs() { return "ok"; }
             public string SeedPhotonObjectives(SFRTParameters parameters) { return "ok"; }
+            public bool HasPhotonSeedingStructures() { return true; }
+            public bool HasActivePlanSetup() { return true; }
             public bool CanModifyStructureSet(out string reason) { reason = null; return true; }
             public StructureCreationResult CreateLatticeStructures(IReadOnlyList<SphereModel> spheres, SFRTParameters parameters, IProgress<string> progress, CancellationToken token) { throw new NotImplementedException(); }
             public LatticeGeometryContext ExtractLatticeGeometry(SFRTParameters parameters, IProgress<string> progress, CancellationToken token) { throw new NotImplementedException(); }

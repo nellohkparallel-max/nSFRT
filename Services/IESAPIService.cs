@@ -58,6 +58,8 @@ namespace SFRThelper.Services
 
         string SetupVmatArcs();
         string SeedPhotonObjectives(SFRTParameters parameters);
+        bool HasPhotonSeedingStructures();
+        bool HasActivePlanSetup();
     }
 
     public class EvaluationDoseContext

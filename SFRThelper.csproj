@@ -67,6 +67,7 @@
     <Compile Include="Models\LatticeGeometryContext.cs" />
     <Compile Include="Models\LatticePackingResult.cs" />
     <Compile Include="Models\LatticeTransform.cs" />
+    <Compile Include="Models\OptimizationObjectivePresets.cs" />
     <Compile Include="Models\PlanListItem.cs" />
     <Compile Include="Models\Point3D.cs" />
     <Compile Include="Models\SFRTEvaluationResult.cs" />

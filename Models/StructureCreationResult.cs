@@ -11,6 +11,8 @@ namespace SFRThelper.Models
         public string ValleyId { get; set; }
         public string Ring01Id { get; set; }
         public string Ring13Id { get; set; }
+        public string PenumbraShellId { get; set; }
+        public string ValleyCoreId { get; set; }
         public bool RolledBack { get; set; }
 
         public StructureCreationResult()

@@ -86,6 +86,9 @@
     <Compile Include="..\Models\LatticeTransform.cs">
       <Link>Models\LatticeTransform.cs</Link>
     </Compile>
+    <Compile Include="..\Models\OptimizationObjectivePresets.cs">
+      <Link>Models\OptimizationObjectivePresets.cs</Link>
+    </Compile>
     <Compile Include="..\Models\PlanListItem.cs">
       <Link>Models\PlanListItem.cs</Link>
     </Compile>

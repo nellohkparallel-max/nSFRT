@@ -25,6 +25,13 @@ namespace SFRThelper.Services
                 _createdIds.Add(structureId);
         }
 
+        public void Untrack(string structureId)
+        {
+            if (string.IsNullOrEmpty(structureId))
+                return;
+            _createdIds.Remove(structureId);
+        }
+
         public void Commit()
         {
             IsCommitted = true;

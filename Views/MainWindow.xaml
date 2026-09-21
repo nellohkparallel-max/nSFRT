@@ -267,6 +267,41 @@
                                 </StackPanel>
                             </GroupBox>
 
+                            <GroupBox Header="Geometry &amp; Tuning" Margin="0,0,0,8">
+                                <StackPanel Margin="4">
+                                    <CheckBox Content="Generate Tuning Structures"
+                                              IsChecked="{Binding Parameters.GenerateTuningStructures}"
+                                              IsEnabled="{Binding IsIdle}"
+                                              ToolTip="Peak_Penumbra shell, Valley_Core, and External-clipped concentric rings for steep PO gradients."/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="176"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Penumbra shell (mm):" VerticalAlignment="Center" Margin="4"/>
+                                        <TextBox Grid.Row="0" Grid.Column="1"
+                                                 Text="{Binding Parameters.PenumbraShellThicknessMm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                                 IsEnabled="{Binding Parameters.GenerateTuningStructures}"
+                                                 ToolTip="d_shell = d_margin (1.0–5.0 mm). Default 3.0 mm."/>
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Ring 1 outer (mm):" VerticalAlignment="Center" Margin="4"/>
+                                        <TextBox Grid.Row="1" Grid.Column="1"
+                                                 Text="{Binding Parameters.ConcentricRing1Mm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                                 IsEnabled="{Binding Parameters.GenerateTuningStructures}"
+                                                 ToolTip="Ring_SFRT_0-1cm outer expansion. Default 10 mm."/>
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Ring 2 outer (mm):" VerticalAlignment="Center" Margin="4"/>
+                                        <TextBox Grid.Row="2" Grid.Column="1"
+                                                 Text="{Binding Parameters.ConcentricRing2Mm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                                 IsEnabled="{Binding Parameters.GenerateTuningStructures}"
+                                                 ToolTip="Ring_SFRT_1-3cm outer expansion. Default 30 mm."/>
+                                    </Grid>
+                                </StackPanel>
+                            </GroupBox>
+
                             <GroupBox Header="Pre-calculation summary" Margin="0,0,0,8">
                                 <TextBox Text="{Binding FeasibilityText, Mode=OneWay}"
                                          IsReadOnly="True"
@@ -438,21 +473,86 @@
                         <TextBlock Text="Photon Optimizer and VMAT helpers"
                                    FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
                         <TextBlock TextWrapping="Wrap" Margin="0,0,0,12"
-                                   Text="These routines run on the Eclipse STA thread. Seed PO after Lattice_Peaks / Lattice_Valley / Ring_SFRT_* exist. VMAT setup copies machine parameters from an existing treatment beam and adds two coplanar arcs (collimators 15° and 75°) with jaw tracking."/>
+                                   Text="These routines run on the Eclipse STA thread. Seed PO after Lattice_Peaks and Valley_Core (or Lattice_Valley) exist. VMAT setup copies machine parameters from an existing treatment beam and adds two coplanar arcs (collimators 15° and 75°) with jaw tracking."/>
 
-                        <GroupBox Header="Plan automation" Margin="0,0,0,12">
-                            <StackPanel Margin="8">
-                                <WrapPanel>
+                        <GroupBox Header="Plan Automation &amp; PO Seeding" Margin="0,0,0,12">
+                            <Grid Margin="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="200"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Prescription D_rx (Gy):" VerticalAlignment="Center" Margin="4"/>
+                                <TextBox Grid.Row="0" Grid.Column="1"
+                                         Text="{Binding Parameters.PrescriptionDoseGy, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                         IsEnabled="{Binding IsIdle}"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Fractions (N_fx):" VerticalAlignment="Center" Margin="4"/>
+                                <TextBox Grid.Row="1" Grid.Column="1"
+                                         Text="{Binding Parameters.Fractions, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                         IsEnabled="{Binding IsIdle}"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Objective preset:" VerticalAlignment="Center" Margin="4"/>
+                                <ComboBox Grid.Row="2" Grid.Column="1"
+                                          ItemsSource="{Binding PoObjectivePresetOptions}"
+                                          DisplayMemberPath="Display"
+                                          SelectedValuePath="Value"
+                                          SelectedValue="{Binding SelectedPoObjectivePreset}"
+                                          IsEnabled="{Binding IsIdle}"/>
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="OAR 1 Dmax (Gy):" VerticalAlignment="Center" Margin="4"/>
+                                <TextBox Grid.Row="3" Grid.Column="1"
+                                         Text="{Binding Parameters.Oar1DoseLimitGy, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                         IsEnabled="{Binding IsIdle}"
+                                         ToolTip="Upper Dmax for OAR Avoidance 1 when selected (e.g. cord 10–14 Gy in 1 fx)."/>
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="OAR 2 Dmax (Gy):" VerticalAlignment="Center" Margin="4"/>
+                                <TextBox Grid.Row="4" Grid.Column="1"
+                                         Text="{Binding Parameters.Oar2DoseLimitGy, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                         IsEnabled="{Binding IsIdle}"/>
+
+                                <CheckBox Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2"
+                                          Content="Auto-enable Jaw Tracking"
+                                          IsChecked="{Binding Parameters.AutoEnableJawTracking}"
+                                          IsEnabled="{Binding IsIdle}"/>
+
+                                <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" Margin="4,8,4,4">
+                                    <RadioButton Content="Clear Existing Objectives"
+                                                 GroupName="PoSeedMode"
+                                                 IsChecked="{Binding Parameters.ClearExistingObjectives}"
+                                                 IsEnabled="{Binding IsIdle}"
+                                                 Margin="0,0,0,4"/>
+                                    <RadioButton Content="Append to Existing"
+                                                 GroupName="PoSeedMode"
+                                                 IsChecked="{Binding Parameters.AppendObjectives}"
+                                                 IsEnabled="{Binding IsIdle}"/>
+                                </StackPanel>
+
+                                <WrapPanel Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,8,0,0">
                                     <Button Content="Seed PO Objectives"
-                                            Command="{Binding SeedObjectivesCommand}"
-                                            IsEnabled="{Binding CanAutomate}"/>
+                                            Command="{Binding SeedPoObjectivesCommand}"
+                                            IsEnabled="{Binding CanSeedPoObjectives}"
+                                            FontWeight="SemiBold"/>
                                     <Button Content="Setup VMAT Arcs"
                                             Command="{Binding SetupVmatArcsCommand}"
                                             IsEnabled="{Binding CanAutomate}"/>
                                 </WrapPanel>
-                                <TextBlock TextWrapping="Wrap" Margin="4,8,4,0" Foreground="#445"
-                                           Text="Peaks: Lower 100% Rx (priority 100–120). Valley: Upper ≤30–33% Rx. Rings: steep upper falloff. NTO weight 40."/>
-                            </StackPanel>
+                                <TextBlock Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2"
+                                           TextWrapping="Wrap" Margin="4,8,4,0" Foreground="#445"
+                                           Text="Peaks: Lower 100% Rx at V99 (priority 120). Valley_Core: Upper 30–40% Rx. Peak_Penumbra: Upper 55–60% Rx. Rings: 45% / 25% falloff. NTO weight 40."/>
+                            </Grid>
                         </GroupBox>
 
                         <GroupBox Header="QA report" Margin="0,0,0,12">
@@ -468,7 +568,7 @@
 
                         <GroupBox Header="Structure naming (TG-263 / 16-character Eclipse IDs)">
                             <TextBlock Margin="8" FontFamily="Consolas" TextWrapping="Wrap"
-                                       Text="Peak_01 … Peak_nn&#x0a;Lattice_Peaks = ∪ Peak_i&#x0a;Lattice_Valley = Target \ Lattice_Peaks&#x0a;Ring_SFRT_0-1cm = (Target + 10 mm) \ Target&#x0a;Ring_SFRT_1-3cm = (Target + 30 mm) \ (Target + 10 mm)"/>
+                                       Text="Peak_01 … Peak_nn&#x0a;Lattice_Peaks = ∪ Peak_i&#x0a;Lattice_Valley = Target \ Lattice_Peaks&#x0a;Peak_Penumbra = (Peaks + d_shell) \ Peaks ∩ Target&#x0a;Valley_Core = Target \ (Peaks + d_shell)&#x0a;Ring_SFRT_0-1cm = ((Target + r1) \ Target) ∩ External&#x0a;Ring_SFRT_1-3cm = ((Target + r2) \ (Target + r1)) ∩ External"/>
                         </GroupBox>
                     </StackPanel>
                 </ScrollViewer>

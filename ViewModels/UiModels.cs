@@ -43,4 +43,10 @@ namespace SFRThelper.ViewModels
         public SphereMaximizationStrategy Value { get; set; }
         public string Display { get; set; }
     }
+
+    public class PoObjectivePresetOption
+    {
+        public PoObjectivePreset Value { get; set; }
+        public string Display { get; set; }
+    }
 }

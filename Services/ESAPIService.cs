@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Windows.Media;
@@ -584,39 +585,107 @@ namespace SFRThelper.Services
 
                 valley.SegmentVolume = target.SegmentVolume;
                 valley.SegmentVolume = valley.Sub(composite.SegmentVolume);
+                existing.Add(valley.Id);
 
-                token.ThrowIfCancellationRequested();
-                Report(progress, "Creating Ring_SFRT_0-1cm and Ring_SFRT_1-3cm...");
-                string ring01Id = StructureNaming.NextAvailable(StructureNaming.Ring01Id, existing);
-                Structure ring01 = CurrentStructureSet.AddStructure("CONTROL", ring01Id);
-                transaction.Track(ring01.Id);
-                existing.Add(ring01.Id);
-                ring01.Color = Colors.LimeGreen;
-                if (highRes && !ring01.IsHighResolution)
-                    ring01.ConvertToHighResolution();
-                ring01.SegmentVolume = target.Margin(10.0);
-                ring01.SegmentVolume = ring01.Sub(target.SegmentVolume);
+                Structure penumbra = null;
+                Structure valleyCore = null;
+                Structure ring01 = null;
+                Structure ring13 = null;
+                Structure bodyTemp = null;
 
-                string ring13Id = StructureNaming.NextAvailable(StructureNaming.Ring13Id, existing);
-                Structure ring13 = CurrentStructureSet.AddStructure("CONTROL", ring13Id);
-                transaction.Track(ring13.Id);
-                ring13.Color = Colors.MediumSeaGreen;
-                if (highRes && !ring13.IsHighResolution)
-                    ring13.ConvertToHighResolution();
-                ring13.SegmentVolume = target.Margin(30.0);
-                ring13.SegmentVolume = ring13.Sub(target.Margin(10.0));
+                if (parameters.GenerateTuningStructures)
+                {
+                    double dShell = parameters.PenumbraShellThicknessMm;
+                    if (dShell < 1.0) dShell = 1.0;
+                    if (dShell > 5.0) dShell = 5.0;
+                    double ring1Mm = parameters.ConcentricRing1Mm > 0 ? parameters.ConcentricRing1Mm : 10.0;
+                    double ring2Mm = parameters.ConcentricRing2Mm > ring1Mm ? parameters.ConcentricRing2Mm : ring1Mm + 20.0;
+
+                    Structure bodyClip = FindBodyStructure();
+                    if (bodyClip != null && highRes && !bodyClip.IsHighResolution)
+                    {
+                        try
+                        {
+                            string tmpId = StructureNaming.NextAvailable("zzExtHR", existing);
+                            bodyTemp = CurrentStructureSet.AddStructure("CONTROL", tmpId);
+                            transaction.Track(bodyTemp.Id);
+                            existing.Add(bodyTemp.Id);
+                            bodyTemp.SegmentVolume = bodyClip.SegmentVolume;
+                            EnsureHighResolution(bodyTemp, true);
+                            bodyClip = bodyTemp;
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine("EXTERNAL HR copy: " + ex.Message);
+                            if (bodyTemp != null)
+                            {
+                                try { CurrentStructureSet.RemoveStructure(bodyTemp); }
+                                catch { }
+                                transaction.Untrack(bodyTemp.Id);
+                                existing.Remove(bodyTemp.Id);
+                                bodyTemp = null;
+                            }
+                            bodyClip = FindBodyStructure();
+                        }
+                    }
+
+                    token.ThrowIfCancellationRequested();
+                    Report(progress, "Creating Peak_Penumbra = (Peaks.Margin(+d) \\ Peaks) ∩ Target...");
+                    string penumbraId = StructureNaming.NextAvailable(StructureNaming.PenumbraShellId, existing);
+                    penumbra = AddTypedStructure(StructureNaming.DicomControl, penumbraId, transaction, existing, highRes);
+                    penumbra.Color = Color.FromRgb(255, 140, 0);
+                    penumbra.SegmentVolume = composite.Margin(dShell);
+                    penumbra.SegmentVolume = penumbra.Sub(composite.SegmentVolume);
+                    penumbra.SegmentVolume = penumbra.And(target.SegmentVolume);
+
+                    token.ThrowIfCancellationRequested();
+                    Report(progress, "Creating Valley_Core = Target \\ Peaks.Margin(+d)...");
+                    string coreId = StructureNaming.NextAvailable(StructureNaming.ValleyCoreId, existing);
+                    valleyCore = AddTypedStructure(StructureNaming.DicomAvoidance, coreId, transaction, existing, highRes);
+                    valleyCore.Color = Color.FromRgb(30, 144, 255);
+                    valleyCore.SegmentVolume = target.SegmentVolume;
+                    valleyCore.SegmentVolume = valleyCore.Sub(composite.Margin(dShell));
+
+                    token.ThrowIfCancellationRequested();
+                    Report(progress, "Creating Ring_SFRT rings clipped to EXTERNAL...");
+                    string ring01Id = StructureNaming.NextAvailable(StructureNaming.Ring01Id, existing);
+                    ring01 = AddTypedStructure(StructureNaming.DicomAvoidance, ring01Id, transaction, existing, highRes);
+                    ring01.Color = Color.FromRgb(144, 238, 144);
+                    ring01.SegmentVolume = target.Margin(ring1Mm);
+                    ring01.SegmentVolume = ring01.Sub(target.SegmentVolume);
+                    ClipToExternalIfPossible(ring01, bodyClip);
+
+                    string ring13Id = StructureNaming.NextAvailable(StructureNaming.Ring13Id, existing);
+                    ring13 = AddTypedStructure(StructureNaming.DicomAvoidance, ring13Id, transaction, existing, highRes);
+                    ring13.Color = Color.FromRgb(192, 192, 192);
+                    ring13.SegmentVolume = target.Margin(ring2Mm);
+                    ring13.SegmentVolume = ring13.Sub(target.Margin(ring1Mm));
+                    ClipToExternalIfPossible(ring13, bodyClip);
+
+                    if (bodyTemp != null)
+                    {
+                        try { CurrentStructureSet.RemoveStructure(bodyTemp); }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine("Remove zzExtHR: " + ex.Message);
+                        }
+                        transaction.Untrack(bodyTemp.Id);
+                        existing.Remove(bodyTemp.Id);
+                        bodyTemp = null;
+                    }
+                }
 
                 transaction.Commit();
                 result.Success = true;
                 result.CreatedStructureIds = new List<string>(transaction.CreatedIds);
                 result.CompositePeaksId = composite.Id;
                 result.ValleyId = valley.Id;
-                result.Ring01Id = ring01.Id;
-                result.Ring13Id = ring13.Id;
-                result.Message = createIndividuals
-                    ? "Created " + peakStructures.Count + " Peak structures, " + composite.Id + ", " + valley.Id
-                      + ", " + ring01.Id + ", and " + ring13.Id + "."
-                    : "Created " + composite.Id + ", " + valley.Id + ", " + ring01.Id + ", and " + ring13.Id + ".";
+                result.PenumbraShellId = penumbra != null ? penumbra.Id : null;
+                result.ValleyCoreId = valleyCore != null ? valleyCore.Id : null;
+                result.Ring01Id = ring01 != null ? ring01.Id : null;
+                result.Ring13Id = ring13 != null ? ring13.Id : null;
+                result.Message = BuildCreationMessage(createIndividuals, peakStructures.Count, composite.Id, valley.Id,
+                    penumbra, valleyCore, ring01, ring13);
                 return result;
             }
             catch (OperationCanceledException)
@@ -683,7 +752,15 @@ namespace SFRThelper.Services
 
                 plan.AddVMATBeam(machine, weights, 15.0, 181.0, 179.0, GantryDirection.Clockwise, 0.0, iso);
                 plan.AddVMATBeam(machine, weights, 75.0, 179.0, 181.0, GantryDirection.CounterClockwise, 0.0, iso);
-                plan.OptimizationSetup.UseJawTracking = true;
+                try
+                {
+                    if (plan.OptimizationSetup != null)
+                        plan.OptimizationSetup.UseJawTracking = true;
+                }
+                catch (Exception ex)
+                {
+                    return "Added 2 coplanar VMAT arcs (collimators 15° / 75°). Jaw tracking is not supported on this machine: " + ex.Message;
+                }
                 return "Added 2 coplanar VMAT arcs (collimators 15° / 75°) and enabled jaw tracking.";
             }
             catch (Exception ex)
@@ -702,36 +779,162 @@ namespace SFRThelper.Services
 
                 ExternalPlanSetup plan = ResolveExternalPlan();
                 if (plan == null)
-                    return "No ExternalPlanSetup is in scope. Open a photon plan before seeding PO objectives.";
+                    return "No ExternalPlanSetup is in scope. Open a photon plan in write mode before seeding PO objectives.";
 
-                double rxGy = 0;
-                try { rxGy = ToGy(plan.TotalPrescribedDose); }
-                catch { rxGy = ToGy(plan.TotalDose); }
+                if (plan.ApprovalStatus == PlanSetupApprovalStatus.TreatmentApproved)
+                {
+                    return "Plan '" + plan.Id + "' is treatment-approved and locked. Unapprove the plan before seeding Photon Optimizer objectives.";
+                }
+
+                if (plan.OptimizationSetup == null)
+                    return "Plan '" + plan.Id + "' does not have an active OptimizationSetup. Initialize optimization on the plan first.";
+
+                if (parameters == null)
+                    return "Parameters were not provided.";
+
+                double rxGy = parameters.PrescriptionDoseGy;
                 if (rxGy <= 0)
-                    return "Plan prescription dose is not set.";
+                {
+                    try { rxGy = ToGy(plan.TotalPrescribedDose); }
+                    catch { rxGy = ToGy(plan.TotalDose); }
+                }
+                if (rxGy <= 0)
+                    return "Prescription dose (D_rx) must be greater than 0 Gy.";
+
+                int nfx = parameters.FractionCount;
+                if (nfx < 1)
+                    nfx = 1;
 
                 Structure peaks = FindByIdOrPrefix(StructureNaming.CompositePeaksId, "Lattice_Pe");
+                Structure valleyCore = FindByIdOrPrefix(StructureNaming.ValleyCoreId, "Valley_Co");
                 Structure valley = FindByIdOrPrefix(StructureNaming.ValleyId, "Lattice_Va");
-                Structure ring01 = FindByIdOrPrefix(StructureNaming.Ring01Id, "Ring_SFRT_0");
-                Structure ring13 = FindByIdOrPrefix(StructureNaming.Ring13Id, "Ring_SFRT_1");
-                if (peaks == null || valley == null)
-                    return "Generate Lattice_Peaks and Lattice_Valley before seeding objectives.";
+                if (peaks == null || (valleyCore == null && valley == null))
+                    return "Generate Lattice_Peaks and Valley_Core (or Lattice_Valley) before seeding PO objectives.";
 
                 var opt = plan.OptimizationSetup;
-                opt.AddPointObjective(peaks, OptimizationObjectiveOperator.Lower, new DoseValue(rxGy, DoseValue.DoseUnit.Gy), 0, 120);
-                opt.AddPointObjective(peaks, OptimizationObjectiveOperator.Lower, new DoseValue(rxGy, DoseValue.DoseUnit.Gy), 95, 100);
-                opt.AddPointObjective(valley, OptimizationObjectiveOperator.Upper, new DoseValue(0.35 * rxGy, DoseValue.DoseUnit.Gy), 0, 90);
-                opt.AddPointObjective(valley, OptimizationObjectiveOperator.Upper, new DoseValue(0.30 * rxGy, DoseValue.DoseUnit.Gy), 50, 70);
-                if (ring01 != null)
-                    opt.AddPointObjective(ring01, OptimizationObjectiveOperator.Upper, new DoseValue(0.50 * rxGy, DoseValue.DoseUnit.Gy), 0, 70);
-                if (ring13 != null)
-                    opt.AddPointObjective(ring13, OptimizationObjectiveOperator.Upper, new DoseValue(0.30 * rxGy, DoseValue.DoseUnit.Gy), 0, 60);
-                opt.AddAutomaticNormalTissueObjective(40);
-                return "Seeded PO objectives on Lattice_Peaks (100% lower), Lattice_Valley (≤35% upper), and SFRT rings.";
+
+                if (parameters.ClearExistingObjectives)
+                {
+                    try
+                    {
+                        var existing = opt.Objectives.ToList();
+                        foreach (var obj in existing)
+                        {
+                            try
+                            {
+                                opt.RemoveObjective(obj);
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine("RemoveObjective: " + ex.Message);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        return "Could not clear existing PO objectives. The plan may be locked or unapproved for editing. " + ex.Message;
+                    }
+                }
+
+                IList<PoPointObjective> specs = OptimizationObjectivePresets.Build(parameters, rxGy);
+                int added = 0;
+                bool valleyCoreAdded = false;
+                foreach (var spec in specs)
+                {
+                    if (spec == null)
+                        continue;
+                    if (spec.Role == "Lattice_Valley" && valleyCoreAdded)
+                        continue;
+
+                    Structure structure = FindByIdOrPrefix(spec.StructureId, spec.StructurePrefix);
+                    if (structure == null || structure.IsEmpty)
+                    {
+                        if (spec.Required)
+                            return "Required structure '" + spec.StructureId + "' was not found or is empty.";
+                        continue;
+                    }
+
+                    OptimizationObjectiveOperator op = spec.IsLower
+                        ? OptimizationObjectiveOperator.Lower
+                        : OptimizationObjectiveOperator.Upper;
+                    opt.AddPointObjective(
+                        structure,
+                        op,
+                        new DoseValue(spec.DoseGy, DoseValue.DoseUnit.Gy),
+                        spec.VolumePercent,
+                        spec.Priority);
+                    added++;
+                    if (spec.Role == "Valley_Core")
+                        valleyCoreAdded = true;
+                }
+
+                try
+                {
+                    opt.AddAutomaticNormalTissueObjective(40);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("NTO: " + ex.Message);
+                }
+
+                bool jawEnabled = false;
+                string jawNote = null;
+                if (parameters.AutoEnableJawTracking)
+                {
+                    try
+                    {
+                        opt.UseJawTracking = true;
+                        jawEnabled = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        jawNote = "Jaw tracking is not supported on this linear accelerator (" + ex.Message + ").";
+                    }
+                }
+
+                if (added == 0)
+                    return "No PO objectives were inserted. Confirm Lattice_Peaks / Valley_Core (or Lattice_Valley) exist on the structure set.";
+
+                string message = string.Format(CultureInfo.InvariantCulture,
+                    "Successfully seeded {0} PO objectives (Rx: {1:0.##} Gy x {2} fx)",
+                    added, rxGy, nfx);
+                if (jawEnabled)
+                    message += " and enabled Jaw Tracking";
+                message += " on Plan: " + plan.Id + ".";
+                if (!string.IsNullOrEmpty(jawNote))
+                    message += " " + jawNote;
+                return message;
             }
             catch (Exception ex)
             {
                 return "PO objective seeding failed: " + ex.Message;
+            }
+        }
+
+        public bool HasPhotonSeedingStructures()
+        {
+            try
+            {
+                Structure peaks = FindByIdOrPrefix(StructureNaming.CompositePeaksId, "Lattice_Pe");
+                Structure valleyCore = FindByIdOrPrefix(StructureNaming.ValleyCoreId, "Valley_Co");
+                Structure valley = FindByIdOrPrefix(StructureNaming.ValleyId, "Lattice_Va");
+                return peaks != null && (valleyCore != null || valley != null);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public bool HasActivePlanSetup()
+        {
+            try
+            {
+                return ResolveExternalPlan() != null;
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -1263,6 +1466,100 @@ namespace SFRThelper.Services
                 return null;
             return ss.Structures.FirstOrDefault(s => s.Id == preferred)
                 ?? ss.Structures.FirstOrDefault(s => s.Id != null && s.Id.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private Structure AddTypedStructure(string dicomType, string id, StructureTransaction transaction, HashSet<string> existing, bool highRes)
+        {
+            Structure structure = null;
+            try
+            {
+                structure = CurrentStructureSet.AddStructure(dicomType, id);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("AddStructure(" + dicomType + ", " + id + "): " + ex.Message);
+                if (!string.Equals(dicomType, StructureNaming.DicomControl, StringComparison.OrdinalIgnoreCase))
+                    structure = CurrentStructureSet.AddStructure(StructureNaming.DicomControl, id);
+                else
+                    throw;
+            }
+
+            if (transaction != null)
+                transaction.Track(structure.Id);
+            if (existing != null)
+                existing.Add(structure.Id);
+            EnsureHighResolution(structure, highRes);
+            return structure;
+        }
+
+        private static void EnsureHighResolution(Structure structure, bool highRes)
+        {
+            if (structure == null || !highRes || structure.IsHighResolution)
+                return;
+            try
+            {
+                structure.ConvertToHighResolution();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("ConvertToHighResolution " + structure.Id + ": " + ex.Message);
+            }
+        }
+
+        private static void ClipToExternalIfPossible(Structure ring, Structure body)
+        {
+            if (ring == null || body == null || body.IsEmpty)
+                return;
+            try
+            {
+                ring.SegmentVolume = ring.And(body.SegmentVolume);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("EXTERNAL clip " + ring.Id + ": " + ex.Message);
+            }
+        }
+
+        private static string BuildCreationMessage(
+            bool createIndividuals,
+            int peakCount,
+            string peaksId,
+            string valleyId,
+            Structure penumbra,
+            Structure valleyCore,
+            Structure ring01,
+            Structure ring13)
+        {
+            var parts = new List<string>();
+            if (createIndividuals)
+                parts.Add(peakCount.ToString(CultureInfo.InvariantCulture) + " Peak structures");
+            parts.Add(peaksId);
+            parts.Add(valleyId);
+            if (penumbra != null)
+                parts.Add(penumbra.Id);
+            if (valleyCore != null)
+                parts.Add(valleyCore.Id);
+            if (ring01 != null)
+                parts.Add(ring01.Id);
+            if (ring13 != null)
+                parts.Add(ring13.Id);
+
+            if (parts.Count == 0)
+                return "Created lattice structures.";
+            if (parts.Count == 1)
+                return "Created " + parts[0] + ".";
+            if (parts.Count == 2)
+                return "Created " + parts[0] + " and " + parts[1] + ".";
+
+            var sb = new System.Text.StringBuilder("Created ");
+            for (int i = 0; i < parts.Count; i++)
+            {
+                if (i > 0)
+                    sb.Append(i == parts.Count - 1 ? ", and " : ", ");
+                sb.Append(parts[i]);
+            }
+            sb.Append(".");
+            return sb.ToString();
         }
 
         private bool TryFindPlanningItem(string key, out PlanningItem item, out PlanListItem info)
