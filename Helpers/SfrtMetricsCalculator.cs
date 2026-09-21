@@ -25,6 +25,15 @@ namespace SFRThelper.Helpers
             return 100.0 * peaksCc / targetCc;
         }
 
+        /// <summary>True when Total MU exceeds 4.5 × D_rx expressed in cGy.</summary>
+        public static bool IsOvermodulated(double totalMu, double prescriptionDoseGy)
+        {
+            if (double.IsNaN(totalMu) || double.IsNaN(prescriptionDoseGy) || prescriptionDoseGy <= 0)
+                return false;
+            double rxCgy = prescriptionDoseGy * 100.0;
+            return totalMu > SFRTParameters.OvermodulationMuPerCgy * rxCgy + 1e-6;
+        }
+
         public static bool IsVolumeFractionOutOfRange(double percent)
         {
             if (double.IsNaN(percent))

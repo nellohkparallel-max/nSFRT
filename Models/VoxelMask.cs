@@ -108,6 +108,21 @@ namespace SFRThelper.Models
             return Get(ix, iy, iz);
         }
 
+        /// <summary>
+        /// O(1) center test against the 2 mm SDF. V_valid is already the contracted center domain,
+        /// so <paramref name="minSdfMm"/> = 0 recovers occupancy. Passing r is appropriate only
+        /// when the mask was rasterized from an uncontracted volume.
+        /// </summary>
+        public bool IsValidCenter(double x, double y, double z, double minSdfMm)
+        {
+            return DistanceToBoundaryMm(x, y, z) >= minSdfMm - 1e-9 && Contains(x, y, z);
+        }
+
+        public bool IsValidCenter(Point3D p, double minSdfMm)
+        {
+            return IsValidCenter(p.X, p.Y, p.Z, minSdfMm);
+        }
+
         public Point3D VoxelCenter(int ix, int iy, int iz)
         {
             return new Point3D(

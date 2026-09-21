@@ -19,8 +19,8 @@ namespace SFRThelper.ViewModels
     {
         private readonly IESAPIService _esapi;
         private readonly SphereOptimizer _sphereOptimizer;
-        private readonly SFRTEvaluationService _evaluationService;
-        private readonly PlanAutomationService _automation;
+        private readonly ISFRTEvaluationService _evaluationService;
+        private readonly IPlanAutomationService _automation;
 
         private bool _isBusy;
         private string _statusMessage = "Ready";
@@ -39,8 +39,7 @@ namespace SFRThelper.ViewModels
         private double _viewMinY;
         private double _viewScale = 1.0;
         private string _maximizationStatusText = "Maximize sphere count to search phase shifts inside the unit cell.";
-        private bool _hasPhotonSeedingStructures;
-        private bool _hasActivePlanSetup;
+        private LinacEnergyOption _selectedLinacOption;
         private const double ViewPadding = 20.0;
 
         public SFRTParameters Parameters { get; private set; }
@@ -59,6 +58,7 @@ namespace SFRThelper.ViewModels
         public IReadOnlyList<SpacingModeOption> SpacingModeOptions { get; private set; }
         public IReadOnlyList<MaximizationStrategyOption> MaximizationStrategyOptions { get; private set; }
         public IReadOnlyList<PoObjectivePresetOption> PoObjectivePresetOptions { get; private set; }
+        public ObservableCollection<LinacEnergyOption> LinacEnergyOptions { get; private set; }
 
         public MainViewModel(IESAPIService esapi)
         {
@@ -80,6 +80,7 @@ namespace SFRThelper.ViewModels
             EvaluationMetrics = new ObservableCollection<EvaluationMetricRow>();
             IndividualPeakDoses = new ObservableCollection<PeakDoseRow>();
             GradientRows = new ObservableCollection<DoseGradientRow>();
+            LinacEnergyOptions = new ObservableCollection<LinacEnergyOption>();
 
             PackingOptions = new[]
             {
@@ -280,6 +281,28 @@ namespace SFRThelper.ViewModels
             {
                 Parameters.IsDirectionalSpacing = value;
                 OnPropertyChanged(nameof(SelectedDirectionalSpacing));
+                OnPropertyChanged(nameof(SelectedUniversalSpacing));
+            }
+        }
+
+        public bool SelectedUniversalSpacing
+        {
+            get { return !Parameters.IsDirectionalSpacing; }
+            set
+            {
+                if (value)
+                    SelectedDirectionalSpacing = false;
+            }
+        }
+
+        public LinacEnergyOption SelectedLinacOption
+        {
+            get { return _selectedLinacOption; }
+            set
+            {
+                if (!SetProperty(ref _selectedLinacOption, value, nameof(SelectedLinacOption)))
+                    return;
+                Parameters.ApplyLinacOption(value);
             }
         }
 
@@ -451,8 +474,21 @@ namespace SFRThelper.ViewModels
                 Parameters.SelectedTargetId = AvailableTargets[0].Id;
 
             LoadPlans();
+            LoadLinacOptions();
             OnTargetChanged();
             RefreshSeedingGuards();
+        }
+
+        private void LoadLinacOptions()
+        {
+            string previousKey = SelectedLinacOption != null ? SelectedLinacOption.Key : null;
+            LinacEnergyOptions.Clear();
+            foreach (var opt in CallEsapi(() => _esapi.GetLinacEnergyOptions()))
+                LinacEnergyOptions.Add(opt);
+
+            LinacEnergyOption match = LinacEnergyOptions.FirstOrDefault(o => o.Key == previousKey)
+                ?? LinacEnergyOptions.FirstOrDefault();
+            SelectedLinacOption = match;
         }
 
         private void RefreshSeedingGuards()
@@ -492,7 +528,10 @@ namespace SFRThelper.ViewModels
             if (e.PropertyName == nameof(SFRTParameters.PoObjectivePreset))
                 OnPropertyChanged(nameof(SelectedPoObjectivePreset));
             if (e.PropertyName == nameof(SFRTParameters.IsDirectionalSpacing))
+            {
                 OnPropertyChanged(nameof(SelectedDirectionalSpacing));
+                OnPropertyChanged(nameof(SelectedUniversalSpacing));
+            }
             CommandManager.InvalidateRequerySuggested();
 
             if (e.PropertyName == nameof(SFRTParameters.SelectedTargetId))
@@ -696,7 +735,12 @@ namespace SFRThelper.ViewModels
             try
             {
                 StatusMessage = "Phase 3: committing Peak / Lattice_Peaks / Lattice_Valley / tuning structures...";
-                var spheres = GeneratedSpheres.ToList();
+                var spheres = GeneratedSpheres.Where(s => s != null && s.IsIncluded).ToList();
+                if (spheres.Count == 0)
+                {
+                    StatusMessage = "Include at least one peak (check the Include column) before generating structures.";
+                    return;
+                }
                 SFRTParameters parameters = Parameters;
                 WorkProgress = 20;
                 StructureCreationResult result = await CallEsapiAsync(
@@ -807,7 +851,7 @@ namespace SFRThelper.ViewModels
             try
             {
                 StatusMessage = "Adding 2-arc coplanar VMAT template...";
-                string message = await CallEsapiAsync(() => _automation.SetupVmatArcs(), CancellationToken.None)
+                string message = await CallEsapiAsync(() => _automation.SetupVmatArcs(Parameters), CancellationToken.None)
                     .ConfigureAwait(true);
                 StatusMessage = message;
             }

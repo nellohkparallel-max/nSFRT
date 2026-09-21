@@ -19,9 +19,13 @@ namespace SFRThelper.Models
         public const string Ring01Id = "Ring_SFRT_0-1cm";
         public const string Ring13Id = "Ring_SFRT_1-3cm";
         public const string TempValidId = "zzSFRTtmp";
+        public const string PoiPeakCenterId = "POI_Peak_Center";
+        /// <summary>Eclipse 16-char ID for POI_Valley_Center.</summary>
+        public const string PoiValleyCenterId = "POI_Valley_Cente";
 
         public const string DicomControl = "CONTROL";
         public const string DicomAvoidance = "AVOIDANCE";
+        public const string DicomMarker = "MARKER";
 
         private static readonly Regex PeakRegex = new Regex(@"^Peak_\d+$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 

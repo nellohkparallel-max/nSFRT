@@ -62,6 +62,12 @@
     <Compile Include="..\Converters\InverseBooleanConverter.cs">
       <Link>Converters\InverseBooleanConverter.cs</Link>
     </Compile>
+    <Compile Include="..\Helpers\BeamMachineParser.cs">
+      <Link>Helpers\BeamMachineParser.cs</Link>
+    </Compile>
+    <Compile Include="..\Helpers\SobolSequence.cs">
+      <Link>Helpers\SobolSequence.cs</Link>
+    </Compile>
     <Compile Include="..\Helpers\SfrtMetricsCalculator.cs">
       <Link>Helpers\SfrtMetricsCalculator.cs</Link>
     </Compile>
@@ -85,6 +91,9 @@
     </Compile>
     <Compile Include="..\Models\LatticeTransform.cs">
       <Link>Models\LatticeTransform.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\LinacEnergyOption.cs">
+      <Link>Models\LinacEnergyOption.cs</Link>
     </Compile>
     <Compile Include="..\Models\OptimizationObjectivePresets.cs">
       <Link>Models\OptimizationObjectivePresets.cs</Link>

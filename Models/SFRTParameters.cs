@@ -21,7 +21,10 @@ namespace SFRThelper.Models
         public const double DefaultExternalClearanceMm = 5.0;
         public const double DefaultGridRotationDeg = 45.0;
         public const double DoseGridWarningMm = 1.25;
-        public const double OvermodulationMuPerGy = 400.0;
+        /// <summary>Flag when Total MU &gt; 4.5 × D_rx (cGy), i.e. &gt; 450 MU/Gy.</summary>
+        public const double OvermodulationMuPerCgy = 4.5;
+        public const double OvermodulationMuPerGy = 450.0;
+        public const double VoxelResolutionMm = 2.0;
 
         private double _sphereRadiusMm = DefaultSphereRadiusMm;
         private double _centerSpacingMm = DefaultCenterSpacingMm;
@@ -57,6 +60,10 @@ namespace SFRThelper.Models
         private double _penumbraUpperPercentOfRx = 55.0;
         private double _oar1DoseLimitGy = 14.0;
         private double _oar2DoseLimitGy = 14.0;
+        private string _selectedMachineId;
+        private string _selectedEnergyMode;
+        private string _selectedPrimaryFluenceMode;
+        private int _selectedDoseRate;
         private readonly Dictionary<string, List<string>> _errors = new Dictionary<string, List<string>>();
 
         public double SphereRadiusMm
@@ -634,6 +641,64 @@ namespace SFRThelper.Models
                 OnPropertyChanged(nameof(Oar2DoseLimitGy));
                 ValidateAll();
             }
+        }
+
+        public string SelectedMachineId
+        {
+            get { return _selectedMachineId; }
+            set
+            {
+                if (_selectedMachineId == value)
+                    return;
+                _selectedMachineId = value;
+                OnPropertyChanged(nameof(SelectedMachineId));
+            }
+        }
+
+        public string SelectedEnergyMode
+        {
+            get { return _selectedEnergyMode; }
+            set
+            {
+                if (_selectedEnergyMode == value)
+                    return;
+                _selectedEnergyMode = value;
+                OnPropertyChanged(nameof(SelectedEnergyMode));
+            }
+        }
+
+        public string SelectedPrimaryFluenceMode
+        {
+            get { return _selectedPrimaryFluenceMode; }
+            set
+            {
+                if (_selectedPrimaryFluenceMode == value)
+                    return;
+                _selectedPrimaryFluenceMode = value;
+                OnPropertyChanged(nameof(SelectedPrimaryFluenceMode));
+            }
+        }
+
+        public int SelectedDoseRate
+        {
+            get { return _selectedDoseRate; }
+            set
+            {
+                if (_selectedDoseRate == value)
+                    return;
+                _selectedDoseRate = value;
+                OnPropertyChanged(nameof(SelectedDoseRate));
+            }
+        }
+
+        public void ApplyLinacOption(LinacEnergyOption option)
+        {
+            if (option == null)
+                return;
+            SelectedMachineId = option.MachineId;
+            SelectedEnergyMode = string.IsNullOrEmpty(option.EnergyModeId) ? option.EnergyModeDisplayName : option.EnergyModeId;
+            SelectedPrimaryFluenceMode = option.PrimaryFluenceMode;
+            SelectedDoseRate = option.DoseRate;
         }
 
         public void BeginPresetApply()

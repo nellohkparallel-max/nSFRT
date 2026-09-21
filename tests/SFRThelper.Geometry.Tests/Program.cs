@@ -43,6 +43,11 @@ namespace SFRThelper.Geometry.Tests
             Run("Feasibility uses packed count and clearances", TestFeasibility);
             Run("QA exporter writes CSV headers and PDF bytes", TestQaExport);
             Run("Halton samples the unit interval", TestHalton);
+            Run("Sobol samples the unit cube", TestSobol);
+            Run("POI marker IDs fit Eclipse 16-character limit", TestPoiIds);
+            Run("Peak Include defaults to true", TestPeakInclusion);
+            Run("Over-modulation uses 4.5 × D_rx (cGy)", TestOvermodulationGuard);
+            Run("EnergyModeDisplayName splits FFF fluence", TestEnergySplit);
             Run("Score prefers higher mean border distance when N ties", TestMaximizationScore);
             Run("Rigid phase-shift increases sphere count vs COM phase", TestPhaseShiftMaximization);
             Run("Particle relaxation stays inside V_valid and respects spacing", TestParticleRelaxation);
@@ -526,6 +531,52 @@ namespace SFRThelper.Geometry.Tests
             AssertTrue(Math.Abs(SphereOptimizer.Halton(0, 2) - SphereOptimizer.Halton(1, 2)) > 1e-9, "distinct samples");
         }
 
+        private static void TestSobol()
+        {
+            double x, y, z;
+            SobolSequence.UnitCube(0, out x, out y, out z);
+            AssertTrue(x >= 0 && x < 1 && y >= 0 && y < 1 && z >= 0 && z < 1, "Sobol in unit cube");
+            double x2, y2, z2;
+            SobolSequence.UnitCube(1, out x2, out y2, out z2);
+            AssertTrue(Math.Abs(x - x2) + Math.Abs(y - y2) + Math.Abs(z - z2) > 1e-9, "distinct Sobol samples");
+            AssertNear(SFRTParameters.VoxelResolutionMm, 2.0, 1e-12, "2 mm voxel");
+        }
+
+        private static void TestPoiIds()
+        {
+            AssertTrue(StructureNaming.PoiPeakCenterId == "POI_Peak_Center", "peak POI");
+            AssertTrue(StructureNaming.PoiValleyCenterId == StructureNaming.Truncate("POI_Valley_Center"), "valley POI truncated");
+            AssertTrue(StructureNaming.PoiPeakCenterId.Length <= 16, "peak POI length");
+            AssertTrue(StructureNaming.PoiValleyCenterId.Length <= 16, "valley POI length");
+            AssertTrue("POI_Valley_Center".Length > 16, "full valley POI exceeds Eclipse");
+        }
+
+        private static void TestPeakInclusion()
+        {
+            var s = new SphereModel(new Point3D(0, 0, 0), 5, 1);
+            AssertTrue(s.IsIncluded, "included by default");
+            s.IsIncluded = false;
+            AssertTrue(!s.IsIncluded, "can exclude");
+        }
+
+        private static void TestOvermodulationGuard()
+        {
+            AssertTrue(!SfrtMetricsCalculator.IsOvermodulated(8999, 20), "20 Gy × 4.5 × 100 = 9000 MU threshold");
+            AssertTrue(SfrtMetricsCalculator.IsOvermodulated(9001, 20), "above 4.5 × D_rx cGy");
+            AssertNear(SFRTParameters.OvermodulationMuPerGy, 450.0, 1e-9, "450 MU/Gy");
+        }
+
+        private static void TestEnergySplit()
+        {
+            string energy;
+            string fluence;
+            BeamMachineParser.SplitEnergyMode("6X-FFF", out energy, out fluence);
+            AssertTrue(energy == "6X", "6X");
+            AssertTrue(fluence == "FFF", "FFF");
+            BeamMachineParser.SplitEnergyMode("10X", out energy, out fluence);
+            AssertTrue(energy == "10X" && fluence == null, "no fluence");
+        }
+
         private static void TestMaximizationScore()
         {
             double a = SphereOptimizer.Score(7, 8.0);
@@ -621,7 +672,9 @@ namespace SFRThelper.Geometry.Tests
             public double TotalMu { get; set; }
             public bool IsStandalone { get { return false; } }
             public IEsapiWorker Worker { get { return null; } }
-            public string SetupVmatArcs() { return "ok"; }
+            public string SetupVmatArcs() { return SetupVmatArcs(null); }
+            public string SetupVmatArcs(SFRTParameters parameters) { return "ok"; }
+            public IReadOnlyList<LinacEnergyOption> GetLinacEnergyOptions() { return new List<LinacEnergyOption>(); }
             public string SeedPhotonObjectives(SFRTParameters parameters) { return "ok"; }
             public bool HasPhotonSeedingStructures() { return true; }
             public bool HasActivePlanSetup() { return true; }

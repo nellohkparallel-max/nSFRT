@@ -8,6 +8,7 @@ namespace SFRThelper.Models
         private double _radius;
         private bool _isEdited;
         private bool _isSelected;
+        private bool _isIncluded = true;
 
         public Point3D Center
         {
@@ -51,6 +52,19 @@ namespace SFRThelper.Models
             {
                 _isSelected = value;
                 OnPropertyChanged(nameof(IsSelected));
+            }
+        }
+
+        /// <summary>When false, the vertex is kept in the preview grid but omitted from structure commit.</summary>
+        public bool IsIncluded
+        {
+            get { return _isIncluded; }
+            set
+            {
+                if (_isIncluded == value)
+                    return;
+                _isIncluded = value;
+                OnPropertyChanged(nameof(IsIncluded));
             }
         }
 

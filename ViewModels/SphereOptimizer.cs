@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
+using SFRThelper.Helpers;
 using SFRThelper.Models;
 using SFRThelper.Services;
 
@@ -606,11 +607,13 @@ namespace SFRThelper.ViewModels
             shifts.Add(new Point3D(0, dxy * 0.5, 0));
             shifts.Add(new Point3D(0, 0, dz * 0.5));
             shifts.Add(new Point3D(dxy * 0.5, dxy * 0.5, dz * 0.5));
-            shifts.Add(new Point3D(dxy * 0.25, dxy * 0.75, dz * 0.25));
+                shifts.Add(new Point3D(dxy * 0.25, dxy * 0.75, dz * 0.25));
             int i = 0;
             while (shifts.Count < maxIterations)
             {
-                shifts.Add(new Point3D(Halton(i, 2) * dxy, Halton(i, 3) * dxy, Halton(i, 5) * dz));
+                double sx, sy, sz;
+                SobolSequence.UnitCube(i, out sx, out sy, out sz);
+                shifts.Add(new Point3D(sx * dxy, sy * dxy, sz * dz));
                 i++;
             }
             if (shifts.Count > maxIterations)

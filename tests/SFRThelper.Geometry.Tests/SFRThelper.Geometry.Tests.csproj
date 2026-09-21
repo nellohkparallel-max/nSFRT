@@ -16,6 +16,7 @@
     <Compile Include="..\..\Models\LatticeGeometryContext.cs" Link="Models\LatticeGeometryContext.cs" />
     <Compile Include="..\..\Models\LatticePackingResult.cs" Link="Models\LatticePackingResult.cs" />
     <Compile Include="..\..\Models\LatticeTransform.cs" Link="Models\LatticeTransform.cs" />
+    <Compile Include="..\..\Models\LinacEnergyOption.cs" Link="Models\LinacEnergyOption.cs" />
     <Compile Include="..\..\Models\OptimizationObjectivePresets.cs" Link="Models\OptimizationObjectivePresets.cs" />
     <Compile Include="..\..\Models\PlanListItem.cs" Link="Models\PlanListItem.cs" />
     <Compile Include="..\..\Models\Point3D.cs" Link="Models\Point3D.cs" />
@@ -27,6 +28,8 @@
     <Compile Include="..\..\Models\StructureListItem.cs" Link="Models\StructureListItem.cs" />
     <Compile Include="..\..\Models\StructureNaming.cs" Link="Models\StructureNaming.cs" />
     <Compile Include="..\..\Models\VoxelMask.cs" Link="Models\VoxelMask.cs" />
+    <Compile Include="..\..\Helpers\BeamMachineParser.cs" Link="Helpers\BeamMachineParser.cs" />
+    <Compile Include="..\..\Helpers\SobolSequence.cs" Link="Helpers\SobolSequence.cs" />
     <Compile Include="..\..\Helpers\SfrtMetricsCalculator.cs" Link="Helpers\SfrtMetricsCalculator.cs" />
     <Compile Include="..\..\Services\IESAPIService.cs" Link="Services\IESAPIService.cs" />
     <Compile Include="..\..\Services\PlanAutomationService.cs" Link="Services\PlanAutomationService.cs" />

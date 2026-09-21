@@ -59,6 +59,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Converters\InverseBooleanConverter.cs" />
+    <Compile Include="Helpers\BeamMachineParser.cs" />
+    <Compile Include="Helpers\SobolSequence.cs" />
     <Compile Include="Helpers\SfrtMetricsCalculator.cs" />
     <Compile Include="Models\BoundingBox3D.cs" />
     <Compile Include="Models\Enums.cs" />
@@ -67,6 +69,7 @@
     <Compile Include="Models\LatticeGeometryContext.cs" />
     <Compile Include="Models\LatticePackingResult.cs" />
     <Compile Include="Models\LatticeTransform.cs" />
+    <Compile Include="Models\LinacEnergyOption.cs" />
     <Compile Include="Models\OptimizationObjectivePresets.cs" />
     <Compile Include="Models\PlanListItem.cs" />
     <Compile Include="Models\Point3D.cs" />

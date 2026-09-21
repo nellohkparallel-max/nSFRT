@@ -5,7 +5,12 @@ using SFRThelper.Models;
 
 namespace SFRThelper.Services
 {
-    public class SFRTEvaluationService
+    public interface ISFRTEvaluationService
+    {
+        SFRTEvaluationResult Evaluate(string planKey, SFRTParameters parameters);
+    }
+
+    public class SFRTEvaluationService : ISFRTEvaluationService
     {
         private readonly IESAPIService _esapi;
 
@@ -60,10 +65,11 @@ namespace SFRThelper.Services
 
             if (ctx.Target != null)
                 result.TargetGeudAMinus10 = ctx.Target.GeudAMinus10;
-            if (ctx.Valley != null)
+            StructureDoseSnapshot valleyForGeud = ctx.ValleyCore != null ? ctx.ValleyCore : ctx.Valley;
+            if (valleyForGeud != null)
             {
-                result.ValleyGeudA1 = ctx.Valley.GeudA1;
-                result.ValleyGeudA2 = ctx.Valley.GeudA2;
+                result.ValleyGeudA1 = valleyForGeud.GeudA1;
+                result.ValleyGeudA2 = valleyForGeud.GeudA2;
             }
 
             result.DoseGridMaxMm = ctx.DoseGridMaxMm;
@@ -73,8 +79,7 @@ namespace SFRThelper.Services
                 result.MuPerGy = ctx.TotalMu / result.PrescriptionDoseGy.Value;
             else
                 result.MuPerGy = double.NaN;
-            result.Overmodulated = !double.IsNaN(result.MuPerGy)
-                && result.MuPerGy > SFRTParameters.OvermodulationMuPerGy;
+            result.Overmodulated = SfrtMetricsCalculator.IsOvermodulated(ctx.TotalMu, result.PrescriptionDoseGy ?? double.NaN);
 
             if (ctx.Gradients != null)
             {
@@ -154,13 +159,13 @@ namespace SFRThelper.Services
             rows.Add(Metric("QA", "Delivery", "MU / Gy",
                 SfrtMetricsCalculator.FormatRatio(result.MuPerGy),
                 result.Overmodulated ? "over-modulated" : "OK",
-                "Total MU / prescription Gy; flag if > 400 MU/Gy"));
+                "Total MU / prescription Gy; flag if Total MU > 4.5 × D_rx (cGy)"));
             rows.Add(Metric("Biology", result.TargetId ?? "Target", "gEUD a=-10",
                 SfrtMetricsCalculator.FormatGy(result.TargetGeudAMinus10), "", "Peak-weighted target response"));
-            rows.Add(Metric("Biology", result.ValleyId ?? "Lattice_Valley", "gEUD a=1",
-                SfrtMetricsCalculator.FormatGy(result.ValleyGeudA1), "", "Mean / sparing on valley"));
-            rows.Add(Metric("Biology", result.ValleyId ?? "Lattice_Valley", "gEUD a=2",
-                SfrtMetricsCalculator.FormatGy(result.ValleyGeudA2), "", "Quadratic valley sparing"));
+            rows.Add(Metric("Biology", result.ValleyId ?? "Valley_Core", "gEUD a=1",
+                SfrtMetricsCalculator.FormatGy(result.ValleyGeudA1), "", "Niemierko gEUD a=1 on Valley_Core (fallback Lattice_Valley)"));
+            rows.Add(Metric("Biology", result.ValleyId ?? "Valley_Core", "gEUD a=2",
+                SfrtMetricsCalculator.FormatGy(result.ValleyGeudA2), "", "Niemierko gEUD a=2 on Valley_Core (fallback Lattice_Valley)"));
             rows.Add(Metric("Gradient", "Peak pairs", "Mean gradient",
                 SfrtMetricsCalculator.FormatGyPerMm(result.MeanGradientGyPerMm), "", "Peak-to-valley spatial gradient"));
             rows.Add(Metric("Gradient", "Peak pairs", "Min trough",
@@ -259,9 +264,11 @@ namespace SFRThelper.Services
             }
             if (result.Overmodulated)
             {
-                alerts.Add("Total MU / prescription dose is "
+                alerts.Add("Total MU is "
+                    + SfrtMetricsCalculator.FormatRatio(result.TotalMu)
+                    + " which exceeds 4.5 × D_rx (cGy) ("
                     + SfrtMetricsCalculator.FormatRatio(result.MuPerGy)
-                    + " MU/Gy (threshold 400). Potential over-modulation.");
+                    + " MU/Gy). Potential over-modulation.");
             }
             if (SfrtMetricsCalculator.IsPvdrLow(result.PvdrMean))
                 alerts.Add("PVDR_mean is " + SfrtMetricsCalculator.FormatRatio(result.PvdrMean) + " (threshold 2.5).");

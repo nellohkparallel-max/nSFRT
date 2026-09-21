@@ -57,9 +57,11 @@ namespace SFRThelper.Services
         EvaluationDoseContext ExtractEvaluationDoseContext(string planKey, SFRTParameters parameters);
 
         string SetupVmatArcs();
+        string SetupVmatArcs(SFRTParameters parameters);
         string SeedPhotonObjectives(SFRTParameters parameters);
         bool HasPhotonSeedingStructures();
         bool HasActivePlanSetup();
+        IReadOnlyList<LinacEnergyOption> GetLinacEnergyOptions();
     }
 
     public class EvaluationDoseContext
@@ -68,6 +70,7 @@ namespace SFRThelper.Services
         public StructureDoseSnapshot Target { get; set; }
         public StructureDoseSnapshot Peaks { get; set; }
         public StructureDoseSnapshot Valley { get; set; }
+        public StructureDoseSnapshot ValleyCore { get; set; }
         public List<StructureDoseSnapshot> IndividualPeaks { get; set; }
         public List<StructureDoseSnapshot> Oars { get; set; }
         public List<DoseGradientRow> Gradients { get; set; }

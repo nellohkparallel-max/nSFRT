@@ -177,12 +177,17 @@
                                              IsEnabled="{Binding IsIdle}"/>
 
                                     <TextBlock Grid.Row="1" Grid.Column="0" Text="Spacing mode:" VerticalAlignment="Center" Margin="4"/>
-                                    <ComboBox Grid.Row="1" Grid.Column="1"
-                                              ItemsSource="{Binding SpacingModeOptions}"
-                                              DisplayMemberPath="Display"
-                                              SelectedValuePath="IsDirectional"
-                                              SelectedValue="{Binding SelectedDirectionalSpacing}"
-                                              IsEnabled="{Binding IsIdle}"/>
+                                    <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="4">
+                                        <RadioButton Content="Universal"
+                                                     GroupName="SpacingMode"
+                                                     IsChecked="{Binding SelectedUniversalSpacing}"
+                                                     IsEnabled="{Binding IsIdle}"
+                                                     Margin="0,0,16,0"/>
+                                        <RadioButton Content="Directional"
+                                                     GroupName="SpacingMode"
+                                                     IsChecked="{Binding SelectedDirectionalSpacing}"
+                                                     IsEnabled="{Binding IsIdle}"/>
+                                    </StackPanel>
 
                                     <TextBlock Grid.Row="2" Grid.Column="0" Text="Universal pitch (mm):" VerticalAlignment="Center" Margin="4"/>
                                     <TextBox Grid.Row="2" Grid.Column="1"
@@ -244,6 +249,7 @@
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
                                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Strategy:" VerticalAlignment="Center" Margin="4"/>
                                         <ComboBox Grid.Row="0" Grid.Column="1"
@@ -261,6 +267,9 @@
                                                     Value="{Binding Parameters.MaxIterations, UpdateSourceTrigger=PropertyChanged}"
                                                     IsEnabled="{Binding Parameters.EnableSphereMaximization}"/>
                                         </DockPanel>
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Voxel SDF:" VerticalAlignment="Center" Margin="4"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="2.0 mm isotropic (fixed)"
+                                                   VerticalAlignment="Center" Margin="4" Foreground="#445"/>
                                     </Grid>
                                     <TextBlock Text="{Binding MaximizationStatusText}" TextWrapping="Wrap"
                                                Margin="4,6,4,2" FontFamily="Consolas" FontSize="12"/>
@@ -269,7 +278,7 @@
 
                             <GroupBox Header="Geometry &amp; Tuning" Margin="0,0,0,8">
                                 <StackPanel Margin="4">
-                                    <CheckBox Content="Generate Tuning Structures"
+                                    <CheckBox Content="Generate Tuning Structures (Penumbra Shell, Valley Core, Rings)"
                                               IsChecked="{Binding Parameters.GenerateTuningStructures}"
                                               IsEnabled="{Binding IsIdle}"
                                               ToolTip="Peak_Penumbra shell, Valley_Core, and External-clipped concentric rings for steep PO gradients."/>
@@ -333,15 +342,16 @@
                             <ProgressBar Height="14" Margin="4,4,4,8" Minimum="0" Maximum="100"
                                          Value="{Binding WorkProgress, Mode=OneWay}"/>
 
-                            <GroupBox Header="Generated peak centers" Margin="0,0,0,0" Height="200">
-                                <DataGrid ItemsSource="{Binding GeneratedSpheres}">
+                            <GroupBox Header="Candidate peaks (uncheck Include to exclude before commit)" Margin="0,0,0,0" Height="200">
+                                <DataGrid ItemsSource="{Binding GeneratedSpheres}" IsReadOnly="False">
                                     <DataGrid.Columns>
-                                        <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="80"/>
-                                        <DataGridTextColumn Header="X" Binding="{Binding X, StringFormat=F1}" Width="60"/>
-                                        <DataGridTextColumn Header="Y" Binding="{Binding Y, StringFormat=F1}" Width="60"/>
-                                        <DataGridTextColumn Header="Z" Binding="{Binding Z, StringFormat=F1}" Width="60"/>
-                                        <DataGridTextColumn Header="R" Binding="{Binding Radius, StringFormat=F1}" Width="50"/>
-                                        <DataGridCheckBoxColumn Header="Edited" Binding="{Binding IsEdited}" Width="60"/>
+                                        <DataGridCheckBoxColumn Header="Include" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="64"/>
+                                        <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="80" IsReadOnly="True"/>
+                                        <DataGridTextColumn Header="X" Binding="{Binding X, StringFormat=F1}" Width="60" IsReadOnly="True"/>
+                                        <DataGridTextColumn Header="Y" Binding="{Binding Y, StringFormat=F1}" Width="60" IsReadOnly="True"/>
+                                        <DataGridTextColumn Header="Z" Binding="{Binding Z, StringFormat=F1}" Width="60" IsReadOnly="True"/>
+                                        <DataGridTextColumn Header="R" Binding="{Binding Radius, StringFormat=F1}" Width="50" IsReadOnly="True"/>
+                                        <DataGridCheckBoxColumn Header="Edited" Binding="{Binding IsEdited}" Width="60" IsReadOnly="True"/>
                                     </DataGrid.Columns>
                                 </DataGrid>
                             </GroupBox>
@@ -370,8 +380,124 @@
                 </Grid>
             </TabItem>
 
-            <!-- Tab 2: Evaluation -->
-            <TabItem Header="Plan Evaluation &amp; Physics QA">
+            <!-- Tab 2: Automation -->
+            <TabItem Header="Plan Automation">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12" MaxWidth="820" HorizontalAlignment="Left">
+                        <TextBlock Text="Photon Optimizer and VMAT helpers"
+                                   FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
+                        <TextBlock TextWrapping="Wrap" Margin="0,0,0,12"
+                                   Text="These routines run on the Eclipse STA thread. Seed PO after Lattice_Peaks and Valley_Core (or Lattice_Valley) exist. VMAT setup copies machine parameters from an existing treatment beam and adds two coplanar arcs (collimators 15° and 75°) with jaw tracking."/>
+
+                        <GroupBox Header="Plan Automation &amp; PO Seeding" Margin="0,0,0,12">
+                            <Grid Margin="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="200"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Linac / energy:" VerticalAlignment="Center" Margin="4"/>
+                                <ComboBox Grid.Row="0" Grid.Column="1"
+                                          ItemsSource="{Binding LinacEnergyOptions}"
+                                          DisplayMemberPath="Display"
+                                          SelectedItem="{Binding SelectedLinacOption}"
+                                          IsEnabled="{Binding IsIdle}"
+                                          ToolTip="Commissioned photon beams inherited from plans on this patient. Used when the active plan has no treatment beam."/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Prescription D_rx (Gy):" VerticalAlignment="Center" Margin="4"/>
+                                <TextBox Grid.Row="1" Grid.Column="1"
+                                         Text="{Binding Parameters.PrescriptionDoseGy, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                         IsEnabled="{Binding IsIdle}"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Fractions (N_fx):" VerticalAlignment="Center" Margin="4"/>
+                                <TextBox Grid.Row="2" Grid.Column="1"
+                                         Text="{Binding Parameters.Fractions, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                         IsEnabled="{Binding IsIdle}"/>
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Objective preset:" VerticalAlignment="Center" Margin="4"/>
+                                <ComboBox Grid.Row="3" Grid.Column="1"
+                                          ItemsSource="{Binding PoObjectivePresetOptions}"
+                                          DisplayMemberPath="Display"
+                                          SelectedValuePath="Value"
+                                          SelectedValue="{Binding SelectedPoObjectivePreset}"
+                                          IsEnabled="{Binding IsIdle}"/>
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="OAR 1 Dmax (Gy):" VerticalAlignment="Center" Margin="4"/>
+                                <TextBox Grid.Row="4" Grid.Column="1"
+                                         Text="{Binding Parameters.Oar1DoseLimitGy, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                         IsEnabled="{Binding IsIdle}"
+                                         ToolTip="Upper Dmax for OAR Avoidance 1 when selected (e.g. cord 10–14 Gy in 1 fx)."/>
+
+                                <TextBlock Grid.Row="5" Grid.Column="0" Text="OAR 2 Dmax (Gy):" VerticalAlignment="Center" Margin="4"/>
+                                <TextBox Grid.Row="5" Grid.Column="1"
+                                         Text="{Binding Parameters.Oar2DoseLimitGy, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
+                                         IsEnabled="{Binding IsIdle}"/>
+
+                                <CheckBox Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
+                                          Content="Auto-enable Jaw Tracking"
+                                          IsChecked="{Binding Parameters.AutoEnableJawTracking}"
+                                          IsEnabled="{Binding IsIdle}"/>
+
+                                <StackPanel Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2" Margin="4,8,4,4">
+                                    <RadioButton Content="Clear Existing Objectives"
+                                                 GroupName="PoSeedMode"
+                                                 IsChecked="{Binding Parameters.ClearExistingObjectives}"
+                                                 IsEnabled="{Binding IsIdle}"
+                                                 Margin="0,0,0,4"/>
+                                    <RadioButton Content="Append to Existing"
+                                                 GroupName="PoSeedMode"
+                                                 IsChecked="{Binding Parameters.AppendObjectives}"
+                                                 IsEnabled="{Binding IsIdle}"/>
+                                </StackPanel>
+
+                                <WrapPanel Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,8,0,0">
+                                    <Button Content="Setup 2-Arc VMAT Template"
+                                            Command="{Binding SetupVmatArcsCommand}"
+                                            IsEnabled="{Binding CanAutomate}"/>
+                                    <Button Content="Seed PO Objectives"
+                                            Command="{Binding SeedPoObjectivesCommand}"
+                                            IsEnabled="{Binding CanSeedPoObjectives}"
+                                            FontWeight="SemiBold"/>
+                                </WrapPanel>
+                                <TextBlock Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="2"
+                                           TextWrapping="Wrap" Margin="4,8,4,0" Foreground="#445"
+                                           Text="VMAT: two coplanar arcs, collimators 15° / 75°, technique ARC, default MLC. Machine/energy inherited from an existing treatment beam or the linac dropdown. Peaks: Lower 100% Rx at V99 (priority 120). Valley_Core: Upper 30–40% Rx."/>
+                            </Grid>
+                        </GroupBox>
+
+                        <GroupBox Header="QA report" Margin="0,0,0,12">
+                            <StackPanel Margin="8">
+                                <TextBlock TextWrapping="Wrap" Margin="0,0,0,8"
+                                           Text="Exports a CSV metric table plus a companion PDF summary (PVDR, gEUD, volume fraction, dose-grid / MU guards, and alerts). Evaluate a calculated plan first."/>
+                                <Button Content="Export QA Report"
+                                        HorizontalAlignment="Left"
+                                        Command="{Binding ExportQaReportCommand}"
+                                        IsEnabled="{Binding CanExportQa}"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="Structure naming (TG-263 / 16-character Eclipse IDs)">
+                            <TextBlock Margin="8" FontFamily="Consolas" TextWrapping="Wrap"
+                                       Text="Peak_01 … Peak_nn&#x0a;Lattice_Peaks = ∪ Peak_i&#x0a;Lattice_Valley = Target \ Lattice_Peaks&#x0a;Peak_Penumbra = (Peaks + d_shell) \ Peaks ∩ Target&#x0a;Valley_Core = Target \ (Peaks + d_shell)&#x0a;Ring_SFRT_0-1cm = ((Target + r1) \ Target) ∩ External&#x0a;Ring_SFRT_1-3cm = ((Target + r2) \ (Target + r1)) ∩ External&#x0a;POI_Peak_Center / POI_Valley_Center"/>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <!-- Tab 3: Evaluation -->
+            <TabItem Header="Plan Evaluation &amp; QA">
                 <Grid Margin="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -388,6 +514,7 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="Plan / PlanSum:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <ComboBox Grid.Column="1"
@@ -400,6 +527,9 @@
                         <Button Grid.Column="3" Content="Evaluate Plan"
                                 Command="{Binding EvaluatePlanCommand}"
                                 IsEnabled="{Binding CanEvaluate}"/>
+                        <Button Grid.Column="4" Content="Export QA Report"
+                                Command="{Binding ExportQaReportCommand}"
+                                IsEnabled="{Binding CanExportQa}"/>
                     </Grid>
 
                     <WrapPanel Grid.Row="1" Margin="0,0,0,8">
@@ -466,113 +596,6 @@
                 </Grid>
             </TabItem>
 
-            <!-- Tab 3: Automation -->
-            <TabItem Header="Automation &amp; QA Report">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="12" MaxWidth="820" HorizontalAlignment="Left">
-                        <TextBlock Text="Photon Optimizer and VMAT helpers"
-                                   FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
-                        <TextBlock TextWrapping="Wrap" Margin="0,0,0,12"
-                                   Text="These routines run on the Eclipse STA thread. Seed PO after Lattice_Peaks and Valley_Core (or Lattice_Valley) exist. VMAT setup copies machine parameters from an existing treatment beam and adds two coplanar arcs (collimators 15° and 75°) with jaw tracking."/>
-
-                        <GroupBox Header="Plan Automation &amp; PO Seeding" Margin="0,0,0,12">
-                            <Grid Margin="8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="200"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Prescription D_rx (Gy):" VerticalAlignment="Center" Margin="4"/>
-                                <TextBox Grid.Row="0" Grid.Column="1"
-                                         Text="{Binding Parameters.PrescriptionDoseGy, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
-                                         IsEnabled="{Binding IsIdle}"/>
-
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Fractions (N_fx):" VerticalAlignment="Center" Margin="4"/>
-                                <TextBox Grid.Row="1" Grid.Column="1"
-                                         Text="{Binding Parameters.Fractions, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
-                                         IsEnabled="{Binding IsIdle}"/>
-
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Objective preset:" VerticalAlignment="Center" Margin="4"/>
-                                <ComboBox Grid.Row="2" Grid.Column="1"
-                                          ItemsSource="{Binding PoObjectivePresetOptions}"
-                                          DisplayMemberPath="Display"
-                                          SelectedValuePath="Value"
-                                          SelectedValue="{Binding SelectedPoObjectivePreset}"
-                                          IsEnabled="{Binding IsIdle}"/>
-
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="OAR 1 Dmax (Gy):" VerticalAlignment="Center" Margin="4"/>
-                                <TextBox Grid.Row="3" Grid.Column="1"
-                                         Text="{Binding Parameters.Oar1DoseLimitGy, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
-                                         IsEnabled="{Binding IsIdle}"
-                                         ToolTip="Upper Dmax for OAR Avoidance 1 when selected (e.g. cord 10–14 Gy in 1 fx)."/>
-
-                                <TextBlock Grid.Row="4" Grid.Column="0" Text="OAR 2 Dmax (Gy):" VerticalAlignment="Center" Margin="4"/>
-                                <TextBox Grid.Row="4" Grid.Column="1"
-                                         Text="{Binding Parameters.Oar2DoseLimitGy, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
-                                         IsEnabled="{Binding IsIdle}"/>
-
-                                <CheckBox Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2"
-                                          Content="Auto-enable Jaw Tracking"
-                                          IsChecked="{Binding Parameters.AutoEnableJawTracking}"
-                                          IsEnabled="{Binding IsIdle}"/>
-
-                                <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" Margin="4,8,4,4">
-                                    <RadioButton Content="Clear Existing Objectives"
-                                                 GroupName="PoSeedMode"
-                                                 IsChecked="{Binding Parameters.ClearExistingObjectives}"
-                                                 IsEnabled="{Binding IsIdle}"
-                                                 Margin="0,0,0,4"/>
-                                    <RadioButton Content="Append to Existing"
-                                                 GroupName="PoSeedMode"
-                                                 IsChecked="{Binding Parameters.AppendObjectives}"
-                                                 IsEnabled="{Binding IsIdle}"/>
-                                </StackPanel>
-
-                                <WrapPanel Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,8,0,0">
-                                    <Button Content="Seed PO Objectives"
-                                            Command="{Binding SeedPoObjectivesCommand}"
-                                            IsEnabled="{Binding CanSeedPoObjectives}"
-                                            FontWeight="SemiBold"/>
-                                    <Button Content="Setup VMAT Arcs"
-                                            Command="{Binding SetupVmatArcsCommand}"
-                                            IsEnabled="{Binding CanAutomate}"/>
-                                </WrapPanel>
-                                <TextBlock Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2"
-                                           TextWrapping="Wrap" Margin="4,8,4,0" Foreground="#445"
-                                           Text="Peaks: Lower 100% Rx at V99 (priority 120). Valley_Core: Upper 30–40% Rx. Peak_Penumbra: Upper 55–60% Rx. Rings: 45% / 25% falloff. NTO weight 40."/>
-                            </Grid>
-                        </GroupBox>
-
-                        <GroupBox Header="QA report" Margin="0,0,0,12">
-                            <StackPanel Margin="8">
-                                <TextBlock TextWrapping="Wrap" Margin="0,0,0,8"
-                                           Text="Exports a CSV metric table plus a companion PDF summary (PVDR, gEUD, volume fraction, dose-grid / MU guards, and alerts). Evaluate a calculated plan first."/>
-                                <Button Content="Export QA Report"
-                                        HorizontalAlignment="Left"
-                                        Command="{Binding ExportQaReportCommand}"
-                                        IsEnabled="{Binding CanExportQa}"/>
-                            </StackPanel>
-                        </GroupBox>
-
-                        <GroupBox Header="Structure naming (TG-263 / 16-character Eclipse IDs)">
-                            <TextBlock Margin="8" FontFamily="Consolas" TextWrapping="Wrap"
-                                       Text="Peak_01 … Peak_nn&#x0a;Lattice_Peaks = ∪ Peak_i&#x0a;Lattice_Valley = Target \ Lattice_Peaks&#x0a;Peak_Penumbra = (Peaks + d_shell) \ Peaks ∩ Target&#x0a;Valley_Core = Target \ (Peaks + d_shell)&#x0a;Ring_SFRT_0-1cm = ((Target + r1) \ Target) ∩ External&#x0a;Ring_SFRT_1-3cm = ((Target + r2) \ (Target + r1)) ∩ External"/>
-                        </GroupBox>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
         </TabControl>
 
         <ProgressBar Grid.Row="2" Height="8" Margin="0,6,0,4" Minimum="0" Maximum="100"
