@@ -1,0 +1,140 @@
+<Window x:Class="SFRThelper.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SFRT Helper" Width="1200" Height="820"
+        MinWidth="1000" MinHeight="700">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="SFRT Sphere Generator"
+                   FontSize="18"
+                   FontWeight="Bold"
+                   HorizontalAlignment="Center"
+                   Margin="0,0,0,10"/>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="420"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <GroupBox Grid.Row="0" Header="Parameters" Margin="0,0,0,10">
+                    <Grid Margin="5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Target GTV/PTV:" VerticalAlignment="Center" Margin="5"/>
+                        <ComboBox Grid.Row="0" Grid.Column="1"
+                                  ItemsSource="{Binding AvailablePTVs}"
+                                  SelectedItem="{Binding Parameters.SelectedPTVId}"
+                                  Margin="5"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Sphere Radius (mm):" VerticalAlignment="Center" Margin="5"/>
+                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Parameters.SphereRadius}" Margin="5"/>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Center Spacing (mm):" VerticalAlignment="Center" Margin="5"/>
+                        <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Parameters.CenterSpacing}" Margin="5"/>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Boundary Margin (mm):" VerticalAlignment="Center" Margin="5"/>
+                        <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding Parameters.BoundaryMarginMm}" Margin="5"/>
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Max Iterations:" VerticalAlignment="Center" Margin="5"/>
+                        <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Parameters.MaxIterations}" Margin="5"/>
+
+                        <!-- MainWindow.xaml : add this inside the Parameters group, below Max Iterations -->
+                        <CheckBox Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2"
+                                Content="Single structure only (no individual spheres)"
+                                IsChecked="{Binding Parameters.SingleStructureOnly}"
+                                Margin="5"/>
+
+                        <Button Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
+                                Content="Generate Spheres"
+                                Command="{Binding GenerateSpheresCommand}"
+                                IsEnabled="{Binding CanGenerate}"
+                                Margin="5" Padding="10,5"/>
+
+                        <Button Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2"
+                                Content="Regenerate Remaining"
+                                Command="{Binding RegenerateRemainingCommand}"
+                                IsEnabled="{Binding CanRegenerateRemaining}"
+                                Margin="5" Padding="10,5"/>
+                    </Grid>
+                </GroupBox>
+
+                <GroupBox Grid.Row="1" Header="Generated Spheres">
+                    <DataGrid ItemsSource="{Binding GeneratedSpheres}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              Margin="0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="85"/>
+                            <DataGridTextColumn Header="X" Binding="{Binding X, StringFormat=F1}" Width="70"/>
+                            <DataGridTextColumn Header="Y" Binding="{Binding Y, StringFormat=F1}" Width="70"/>
+                            <DataGridTextColumn Header="Z" Binding="{Binding Z, StringFormat=F1}" Width="70"/>
+                            <DataGridTextColumn Header="R" Binding="{Binding Radius, StringFormat=F1}" Width="70"/>
+                            <DataGridCheckBoxColumn Header="Edited" Binding="{Binding IsEdited}" Width="70"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </GroupBox>
+
+                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
+                    <Button Content="Create Structures"
+                            Command="{Binding CreateStructuresCommand}"
+                            IsEnabled="{Binding CanCreateStructures}"
+                            Margin="5" Padding="15,5"/>
+                </StackPanel>
+            </Grid>
+
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                    <Button Content="Slice -" Width="80" Margin="0,0,8,0" Command="{Binding SliceDownCommand}"/>
+                    <TextBlock Text="{Binding CurrentSliceText}" VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,8,0"/>
+                    <Button Content="Slice +" Width="80" Command="{Binding SliceUpCommand}"/>
+                    <TextBlock Text="Drag a sphere in the axial view. Invalid move is blocked." Margin="20,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <GroupBox Grid.Row="1" Header="Axial 2D Viewer">
+                    <Grid Background="#111">
+                        <Canvas Name="AxialCanvas" Background="Black"/>
+                    </Grid>
+                </GroupBox>
+            </Grid>
+        </Grid>
+
+        <StatusBar Grid.Row="2">
+            <StatusBarItem>
+                <TextBlock Text="{Binding StatusMessage}"/>
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>
