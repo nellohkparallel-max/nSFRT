@@ -822,8 +822,8 @@ namespace SFRThelper.Services
                 double rxGy = parameters.PrescriptionDoseGy;
                 if (rxGy <= 0)
                 {
-                    try { rxGy = ToGy(plan.TotalPrescribedDose); }
-                    catch { rxGy = ToGy(plan.TotalDose); }
+                    try { rxGy = ToGy(plan.TotalDose); }
+                    catch { rxGy = 0; }
                 }
                 if (rxGy <= 0)
                     return "Prescription dose (D_rx) must be greater than 0 Gy.";

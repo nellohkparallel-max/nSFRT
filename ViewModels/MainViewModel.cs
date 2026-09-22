@@ -40,6 +40,8 @@ namespace SFRThelper.ViewModels
         private double _viewScale = 1.0;
         private string _maximizationStatusText = "Maximize sphere count to search phase shifts inside the unit cell.";
         private LinacEnergyOption _selectedLinacOption;
+        private bool _hasPhotonSeedingStructures;
+        private bool _hasActivePlanSetup;
         private const double ViewPadding = 20.0;
 
         public SFRTParameters Parameters { get; private set; }
