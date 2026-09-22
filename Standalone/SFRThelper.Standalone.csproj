@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">x64</Platform>
+    <ProjectGuid>{A7C2E91F-3B44-4D1A-9E6C-8F0B2C4D5E6F}</ProjectGuid>
+    <OutputType>WinExe</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>SFRThelper</RootNamespace>
+    <AssemblyName>SFRThelper.Standalone</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
+    <TargetFrameworkProfile />
+    <LangVersion>8.0</LangVersion>
+    <Prefer32Bit>false</Prefer32Bit>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <PlatformTarget>x64</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\x64\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE;STANDALONE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <PlatformTarget>x64</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\x64\Release\</OutputPath>
+    <DefineConstants>TRACE;STANDALONE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Xaml">
+      <RequiredTargetFramework>4.0</RequiredTargetFramework>
+    </Reference>
+    <Reference Include="WindowsBase" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="VMS.TPS.Common.Model.API">
+      <HintPath>..\..\Reference\VMS.TPS.Common.Model.API.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="VMS.TPS.Common.Model.Types">
+      <HintPath>..\..\Reference\VMS.TPS.Common.Model.Types.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="..\Converters\InverseBooleanConverter.cs">
+      <Link>Converters\InverseBooleanConverter.cs</Link>
+    </Compile>
+    <Compile Include="..\Helpers\BeamMachineParser.cs">
+      <Link>Helpers\BeamMachineParser.cs</Link>
+    </Compile>
+    <Compile Include="..\Helpers\SobolSequence.cs">
+      <Link>Helpers\SobolSequence.cs</Link>
+    </Compile>
+    <Compile Include="..\Helpers\SfrtMetricsCalculator.cs">
+      <Link>Helpers\SfrtMetricsCalculator.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\BoundingBox3D.cs">
+      <Link>Models\BoundingBox3D.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\Enums.cs">
+      <Link>Models\Enums.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\FeasibilitySummary.cs">
+      <Link>Models\FeasibilitySummary.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\ImageGeometryDto.cs">
+      <Link>Models\ImageGeometryDto.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\LatticeGeometryContext.cs">
+      <Link>Models\LatticeGeometryContext.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\LatticePackingResult.cs">
+      <Link>Models\LatticePackingResult.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\LatticeTransform.cs">
+      <Link>Models\LatticeTransform.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\LinacEnergyOption.cs">
+      <Link>Models\LinacEnergyOption.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\OptimizationObjectivePresets.cs">
+      <Link>Models\OptimizationObjectivePresets.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\PlanListItem.cs">
+      <Link>Models\PlanListItem.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\Point3D.cs">
+      <Link>Models\Point3D.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\SFRTEvaluationResult.cs">
+      <Link>Models\SFRTEvaluationResult.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\SFRTParameters.cs">
+      <Link>Models\SFRTParameters.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\SFRTProtocolPresets.cs">
+      <Link>Models\SFRTProtocolPresets.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\SphereModel.cs">
+      <Link>Models\SphereModel.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\StructureCreationResult.cs">
+      <Link>Models\StructureCreationResult.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\StructureListItem.cs">
+      <Link>Models\StructureListItem.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\StructureNaming.cs">
+      <Link>Models\StructureNaming.cs</Link>
+    </Compile>
+    <Compile Include="..\Models\VoxelMask.cs">
+      <Link>Models\VoxelMask.cs</Link>
+    </Compile>
+    <Compile Include="..\Services\ESAPIService.cs">
+      <Link>Services\ESAPIService.cs</Link>
+    </Compile>
+    <Compile Include="..\Services\EsapiWorker.cs">
+      <Link>Services\EsapiWorker.cs</Link>
+    </Compile>
+    <Compile Include="..\Services\IESAPIService.cs">
+      <Link>Services\IESAPIService.cs</Link>
+    </Compile>
+    <Compile Include="..\Services\PlanAutomationService.cs">
+      <Link>Services\PlanAutomationService.cs</Link>
+    </Compile>
+    <Compile Include="..\Services\QaReportExporter.cs">
+      <Link>Services\QaReportExporter.cs</Link>
+    </Compile>
+    <Compile Include="..\Services\SFRTEvaluationService.cs">
+      <Link>Services\SFRTEvaluationService.cs</Link>
+    </Compile>
+    <Compile Include="..\Services\SpatialHashGrid.cs">
+      <Link>Services\SpatialHashGrid.cs</Link>
+    </Compile>
+    <Compile Include="..\Services\StructureTransaction.cs">
+      <Link>Services\StructureTransaction.cs</Link>
+    </Compile>
+    <Compile Include="..\ViewModels\MainViewModel.cs">
+      <Link>ViewModels\MainViewModel.cs</Link>
+    </Compile>
+    <Compile Include="..\ViewModels\RelayCommand.cs">
+      <Link>ViewModels\RelayCommand.cs</Link>
+    </Compile>
+    <Compile Include="..\ViewModels\SphereOptimizer.cs">
+      <Link>ViewModels\SphereOptimizer.cs</Link>
+    </Compile>
+    <Compile Include="..\ViewModels\UiModels.cs">
+      <Link>ViewModels\UiModels.cs</Link>
+    </Compile>
+    <Compile Include="..\ViewModels\ViewModelBase.cs">
+      <Link>ViewModels\ViewModelBase.cs</Link>
+    </Compile>
+    <Compile Include="..\Views\MainWindow.xaml.cs">
+      <DependentUpon>MainWindow.xaml</DependentUpon>
+      <Link>Views\MainWindow.xaml.cs</Link>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Include="..\Views\MainWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+      <Link>Views\MainWindow.xaml</Link>
+    </Page>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

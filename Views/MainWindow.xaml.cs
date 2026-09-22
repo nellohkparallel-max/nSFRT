@@ -1,5 +1,5 @@
-﻿// MainWindow.xaml.cs : replace the entire file
-using SFRThelper.Models;
+﻿using SFRThelper.Models;
+using SFRThelper.Services;
 using SFRThelper.ViewModels;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -8,7 +8,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
-using VMS.TPS.Common.Model.API;
 
 namespace SFRThelper.Views
 {
@@ -23,10 +22,10 @@ namespace SFRThelper.Views
         private AxialSphereVisual _draggingVisual;
         private readonly Dictionary<SphereModel, Ellipse> _ellipseMap = new Dictionary<SphereModel, Ellipse>();
 
-        public MainWindow(ScriptContext context)
+        public MainWindow(IESAPIService esapi)
         {
             InitializeComponent();
-            DataContext = new MainViewModel(context);
+            DataContext = new MainViewModel(esapi);
 
             Loaded += MainWindow_Loaded;
             SizeChanged += MainWindow_SizeChanged;
@@ -58,7 +57,8 @@ namespace SFRThelper.Views
         private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(MainViewModel.CurrentSliceIndex) ||
-                e.PropertyName == nameof(MainViewModel.StatusMessage))
+                e.PropertyName == nameof(MainViewModel.StatusMessage) ||
+                e.PropertyName == nameof(MainViewModel.FeasibilityText))
             {
                 RedrawAxialCanvas();
             }
@@ -114,7 +114,6 @@ namespace SFRThelper.Views
 
             _draggingEllipse = ellipse;
             _draggingVisual = ellipse.Tag as AxialSphereVisual;
-
             if (_draggingVisual == null || ViewModel == null)
                 return;
 
@@ -127,7 +126,6 @@ namespace SFRThelper.Views
         {
             if (_draggingEllipse == null || _draggingVisual == null || ViewModel == null)
                 return;
-
             if (!_draggingEllipse.IsMouseCaptured || e.LeftButton != MouseButtonState.Pressed)
                 return;
 
@@ -135,7 +133,6 @@ namespace SFRThelper.Views
             bool moved = ViewModel.TryMoveSelectedSphereOnAxialCanvas(p);
             if (moved)
                 RedrawAxialCanvas();
-
             e.Handled = true;
         }
 
@@ -143,7 +140,6 @@ namespace SFRThelper.Views
         {
             if (_draggingEllipse != null)
                 _draggingEllipse.ReleaseMouseCapture();
-
             _draggingEllipse = null;
             _draggingVisual = null;
         }
@@ -152,12 +148,10 @@ namespace SFRThelper.Views
         {
             if (ViewModel == null)
                 return;
-
             if (e.Delta > 0)
                 ViewModel.CurrentSliceIndex++;
             else if (e.Delta < 0)
                 ViewModel.CurrentSliceIndex--;
-
             e.Handled = true;
         }
     }

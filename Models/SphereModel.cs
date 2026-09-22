@@ -1,18 +1,18 @@
 ﻿using System.ComponentModel;
-using VMS.TPS.Common.Model.Types;
 
 namespace SFRThelper.Models
 {
     public class SphereModel : INotifyPropertyChanged
     {
-        private VVector _center;
+        private Point3D _center;
         private double _radius;
         private bool _isEdited;
         private bool _isSelected;
+        private bool _isIncluded = true;
 
-        public VVector Center
+        public Point3D Center
         {
-            get => _center;
+            get { return _center; }
             set
             {
                 _center = value;
@@ -25,7 +25,7 @@ namespace SFRThelper.Models
 
         public double Radius
         {
-            get => _radius;
+            get { return _radius; }
             set
             {
                 _radius = value;
@@ -37,7 +37,7 @@ namespace SFRThelper.Models
 
         public bool IsEdited
         {
-            get => _isEdited;
+            get { return _isEdited; }
             set
             {
                 _isEdited = value;
@@ -47,7 +47,7 @@ namespace SFRThelper.Models
 
         public bool IsSelected
         {
-            get => _isSelected;
+            get { return _isSelected; }
             set
             {
                 _isSelected = value;
@@ -55,22 +55,37 @@ namespace SFRThelper.Models
             }
         }
 
-        public double X => Center.x;
-        public double Y => Center.y;
-        public double Z => Center.z;
+        /// <summary>When false, the vertex is kept in the preview grid but omitted from structure commit.</summary>
+        public bool IsIncluded
+        {
+            get { return _isIncluded; }
+            set
+            {
+                if (_isIncluded == value)
+                    return;
+                _isIncluded = value;
+                OnPropertyChanged(nameof(IsIncluded));
+            }
+        }
 
-        public SphereModel(VVector center, double radius, int index)
+        public double X { get { return Center.X; } }
+        public double Y { get { return Center.Y; } }
+        public double Z { get { return Center.Z; } }
+
+        public SphereModel(Point3D center, double radius, int index)
         {
             _center = center;
             _radius = radius;
-            Id = $"Sphere_{index:D3}";
+            Id = StructureNaming.FormatPeakId(index);
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
 
         protected virtual void OnPropertyChanged(string propertyName)
         {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            PropertyChangedEventHandler handler = PropertyChanged;
+            if (handler != null)
+                handler(this, new PropertyChangedEventArgs(propertyName));
         }
     }
 }
