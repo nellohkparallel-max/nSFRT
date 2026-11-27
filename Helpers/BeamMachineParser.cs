@@ -1,4 +1,5 @@
 using System;
+using SFRThelper.Models;
 
 namespace SFRThelper.Helpers
 {
@@ -45,6 +46,39 @@ namespace SFRThelper.Helpers
                 + (energyMode ?? string.Empty) + "|"
                 + doseRate.ToString(System.Globalization.CultureInfo.InvariantCulture) + "|"
                 + (fluence ?? string.Empty);
+        }
+
+        /// <summary>
+        /// Plan automation is restricted to 10X-FFF (any machine / dose rate).
+        /// </summary>
+        public static bool IsTenXFff(string energyModeId, string primaryFluenceMode, string energyModeDisplayName)
+        {
+            string energy = energyModeId ?? string.Empty;
+            string fluence = primaryFluenceMode ?? string.Empty;
+            string display = energyModeDisplayName ?? string.Empty;
+
+            if (string.Equals(energy, "10X", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(fluence, "FFF", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (display.IndexOf("10X-FFF", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+
+            if (string.Equals(energy, "10X-FFF", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            string splitEnergy;
+            string splitFluence;
+            SplitEnergyMode(display, out splitEnergy, out splitFluence);
+            return string.Equals(splitEnergy, "10X", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(splitFluence, "FFF", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool IsTenXFff(LinacEnergyOption option)
+        {
+            if (option == null)
+                return false;
+            return IsTenXFff(option.EnergyModeId, option.PrimaryFluenceMode, option.EnergyModeDisplayName);
         }
     }
 }

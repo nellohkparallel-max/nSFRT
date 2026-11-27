@@ -44,7 +44,8 @@ namespace SFRThelper.Geometry.Tests
             Run("QA exporter writes CSV headers and PDF bytes", TestQaExport);
             Run("Halton samples the unit interval", TestHalton);
             Run("Sobol samples the unit cube", TestSobol);
-            Run("POI marker IDs fit Eclipse 16-character limit", TestPoiIds);
+            Run("CT-slice group / core / second penumbra IDs fit Eclipse 16 chars", TestGroupedAndPenumbra2Ids);
+            Run("Unlimited avoidance OAR selection validates duplicates", TestUnlimitedAvoidanceOars);
             Run("Peak Include defaults to true", TestPeakInclusion);
             Run("Over-modulation uses 4.5 × D_rx (cGy)", TestOvermodulationGuard);
             Run("EnergyModeDisplayName splits FFF fluence", TestEnergySplit);
@@ -364,6 +365,7 @@ namespace SFRThelper.Geometry.Tests
             PoPointObjective peaks = miami.First(o => o.Role == "Lattice_Peaks");
             PoPointObjective valley = miami.First(o => o.Role == "Valley_Core");
             PoPointObjective shell = miami.First(o => o.Role == "Peak_Penumbra_Shell");
+            PoPointObjective shell2 = miami.First(o => o.Role == "Peak_Penumbra_2");
             PoPointObjective ring01 = miami.First(o => o.Role == "Ring_SFRT_0-1cm");
             PoPointObjective ring13 = miami.First(o => o.Role == "Ring_SFRT_1-3cm");
             AssertTrue(peaks.IsLower && peaks.VolumePercent == 99.0 && peaks.Priority == 120, "peaks lower V99 pri 120");
@@ -371,6 +373,8 @@ namespace SFRThelper.Geometry.Tests
             AssertNear(valley.DoseGy, 6.0, 1e-9, "Miami valley 30% of 20");
             AssertTrue(!valley.IsLower && valley.VolumePercent == 0.0, "valley upper V0");
             AssertNear(shell.DoseGy, 11.0, 1e-9, "Miami penumbra 55% of 20");
+            AssertNear(shell2.DoseGy, 9.0, 1e-9, "second penumbra 45% of 20");
+            AssertTrue(shell2.StructureId == StructureNaming.PenumbraShell2Id, "Peak_Penu2 structure");
             AssertNear(ring01.DoseGy, 9.0, 1e-9, "ring 0-1 45% of 20");
             AssertNear(ring13.DoseGy, 5.0, 1e-9, "ring 1-3 25% of 20");
 
@@ -542,13 +546,35 @@ namespace SFRThelper.Geometry.Tests
             AssertNear(SFRTParameters.VoxelResolutionMm, 2.0, 1e-12, "2 mm voxel");
         }
 
-        private static void TestPoiIds()
+        private static void TestGroupedAndPenumbra2Ids()
         {
-            AssertTrue(StructureNaming.PoiPeakCenterId == "POI_Peak_Center", "peak POI");
-            AssertTrue(StructureNaming.PoiValleyCenterId == StructureNaming.Truncate("POI_Valley_Center"), "valley POI truncated");
-            AssertTrue(StructureNaming.PoiPeakCenterId.Length <= 16, "peak POI length");
-            AssertTrue(StructureNaming.PoiValleyCenterId.Length <= 16, "valley POI length");
-            AssertTrue("POI_Valley_Center".Length > 16, "full valley POI exceeds Eclipse");
+            AssertTrue(StructureNaming.FormatPeakLayerId(1) == "PeakLayer_01", "PeakLayer_01");
+            AssertTrue(StructureNaming.FormatPeakCoreId(1) == "PeakCore_01", "PeakCore_01");
+            AssertTrue(StructureNaming.FormatPeakLayerId(1).Length <= StructureNaming.MaxIdLength, "PeakLayer length");
+            AssertTrue(StructureNaming.FormatPeakCoreId(1).Length <= StructureNaming.MaxIdLength, "PeakCore length");
+            AssertTrue(StructureNaming.PenumbraShell2Id == "Peak_Penu2", "Peak_Penu2 id");
+            AssertTrue(StructureNaming.PenumbraShell2Id.Length <= StructureNaming.MaxIdLength, "Peak_Penu2 length");
+            AssertNear(StructureNaming.RingTargetGapMm, 1.0, 1e-9, "ring target gap");
+            AssertNear(StructureNaming.SecondPenumbraGapMm, 1.0, 1e-9, "second penumbra gap");
+            AssertNear(StructureNaming.SecondPenumbraThicknessMm, 3.0, 1e-9, "second penumbra thickness");
+            AssertNear(StructureNaming.SphereCoreInsetMm, 1.0, 1e-9, "sphere core inset");
+        }
+
+        private static void TestUnlimitedAvoidanceOars()
+        {
+            var p = new SFRTParameters { SelectedTargetId = "GTV" };
+            AssertTrue(p.AvoidanceOars.Count >= 2, "starts with two slots");
+            p.AddAvoidanceOar();
+            AssertTrue(p.AvoidanceOars.Count >= 3, "can add third avoidance organ");
+            p.AvoidanceOars[0].StructureId = "Cord";
+            p.AvoidanceOars[1].StructureId = "Lung_L";
+            p.AvoidanceOars[2].StructureId = "Lung_R";
+            AssertTrue(p.SelectedAvoidanceOars.Count == 3, "three selected OARs");
+            AssertTrue(p.IsValid, "three distinct OARs valid");
+            p.AvoidanceOars[2].StructureId = "Cord";
+            AssertTrue(!p.IsValid, "duplicate OAR invalid");
+            p.AvoidanceOars[2].StructureId = "Esophagus";
+            AssertTrue(p.IsValid, "unique OARs valid again");
         }
 
         private static void TestPeakInclusion()
@@ -575,6 +601,10 @@ namespace SFRThelper.Geometry.Tests
             AssertTrue(fluence == "FFF", "FFF");
             BeamMachineParser.SplitEnergyMode("10X", out energy, out fluence);
             AssertTrue(energy == "10X" && fluence == null, "no fluence");
+            AssertTrue(BeamMachineParser.IsTenXFff("10X", "FFF", "10X-FFF"), "10X+FFF");
+            AssertTrue(BeamMachineParser.IsTenXFff(null, null, "10X-FFF"), "display 10X-FFF");
+            AssertTrue(!BeamMachineParser.IsTenXFff("6X", "FFF", "6X-FFF"), "reject 6X-FFF");
+            AssertTrue(!BeamMachineParser.IsTenXFff("10X", null, "10X"), "reject flattened 10X");
         }
 
         private static void TestMaximizationScore()

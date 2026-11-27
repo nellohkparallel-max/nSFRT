@@ -226,6 +226,17 @@ namespace SFRThelper.Models
             });
             list.Add(new PoPointObjective
             {
+                Role = "Peak_Penumbra_2",
+                StructureId = StructureNaming.PenumbraShell2Id,
+                StructurePrefix = "Peak_Penu2",
+                IsLower = false,
+                DoseGy = Math.Max(0.05, penumbraFrac - 0.10) * rx,
+                VolumePercent = 0.0,
+                Priority = Math.Max(40, profile.PenumbraPriority - 10),
+                Required = false
+            });
+            list.Add(new PoPointObjective
+            {
                 Role = "Ring_SFRT_0-1cm",
                 StructureId = StructureNaming.Ring01Id,
                 StructurePrefix = "Ring_SFRT_0",
@@ -247,33 +258,23 @@ namespace SFRThelper.Models
                 Required = false
             });
 
-            if (parameters.HasOar1 && parameters.Oar1DoseLimitGy > 0)
+            int oarIndex = 1;
+            foreach (AvoidanceOarEntry oar in parameters.SelectedAvoidanceOars)
             {
+                if (oar.DoseLimitGy <= 0)
+                    continue;
                 list.Add(new PoPointObjective
                 {
-                    Role = "OAR Avoidance 1",
-                    StructureId = parameters.Oar1StructureId,
-                    StructurePrefix = parameters.Oar1StructureId,
+                    Role = "OAR Avoidance " + oarIndex,
+                    StructureId = oar.StructureId,
+                    StructurePrefix = oar.StructureId,
                     IsLower = false,
-                    DoseGy = parameters.Oar1DoseLimitGy,
+                    DoseGy = oar.DoseLimitGy,
                     VolumePercent = 0.0,
                     Priority = profile.OarPriority,
                     Required = false
                 });
-            }
-            if (parameters.HasOar2 && parameters.Oar2DoseLimitGy > 0)
-            {
-                list.Add(new PoPointObjective
-                {
-                    Role = "OAR Avoidance 2",
-                    StructureId = parameters.Oar2StructureId,
-                    StructurePrefix = parameters.Oar2StructureId,
-                    IsLower = false,
-                    DoseGy = parameters.Oar2DoseLimitGy,
-                    VolumePercent = 0.0,
-                    Priority = profile.OarPriority,
-                    Required = false
-                });
+                oarIndex++;
             }
 
             return list;

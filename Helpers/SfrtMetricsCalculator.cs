@@ -89,6 +89,12 @@ namespace SFRThelper.Helpers
             summary.Oar2ClearanceMm = parameters.Oar2ClearanceMm;
             summary.Oar1Id = parameters.HasOar1 ? parameters.Oar1StructureId : null;
             summary.Oar2Id = parameters.HasOar2 ? parameters.Oar2StructureId : null;
+            summary.AvoidanceOarSummaries = new System.Collections.Generic.List<string>();
+            foreach (var oar in parameters.SelectedAvoidanceOars)
+            {
+                summary.AvoidanceOarSummaries.Add(
+                    oar.StructureId + "  clearance " + oar.ClearanceMm.ToString("F1", CultureInfo.InvariantCulture) + " mm");
+            }
             summary.PackingMode = parameters.PackingMode;
             summary.VolumeFractionOutOfRange = IsVolumeFractionOutOfRange(fraction);
             summary.SpacingInvalid = parameters.EffectiveLateralSpacingMm < 2.0 * parameters.SphereRadiusMm - 1e-6

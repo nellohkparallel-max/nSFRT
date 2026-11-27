@@ -62,6 +62,7 @@
     <Compile Include="Helpers\BeamMachineParser.cs" />
     <Compile Include="Helpers\SobolSequence.cs" />
     <Compile Include="Helpers\SfrtMetricsCalculator.cs" />
+    <Compile Include="Models\AvoidanceOarEntry.cs" />
     <Compile Include="Models\BoundingBox3D.cs" />
     <Compile Include="Models\Enums.cs" />
     <Compile Include="Models\FeasibilitySummary.cs" />

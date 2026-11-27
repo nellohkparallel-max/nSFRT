@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace SFRThelper.Models
 {
     /// <summary>
@@ -16,6 +18,7 @@ namespace SFRThelper.Models
         public string TargetId { get; set; }
         public string Oar1Id { get; set; }
         public string Oar2Id { get; set; }
+        public List<string> AvoidanceOarIds { get; set; }
         public string BodyId { get; set; }
         public ImageGeometryDto Image { get; set; }
         public LatticeTransform Transform { get; set; }
@@ -23,6 +26,11 @@ namespace SFRThelper.Models
         public bool IsValid
         {
             get { return ValidVolume != null && !ValidVolume.IsEmpty; }
+        }
+
+        public LatticeGeometryContext()
+        {
+            AvoidanceOarIds = new List<string>();
         }
     }
 }

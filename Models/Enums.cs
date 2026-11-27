@@ -10,7 +10,12 @@ namespace SFRThelper.Models
     public enum SphereGenerationMode
     {
         IndividualAndComposite = 0,
-        CompositeOnly = 1
+        CompositeOnly = 1,
+        /// <summary>
+        /// Group spheres that share the same CT-slice center into one structure (LatticeHelper-style),
+        /// and create −1 mm sphere-core structures per group for optimization.
+        /// </summary>
+        CtSliceGroupedWithCores = 2
     }
 
     public enum ClinicalProtocolPreset

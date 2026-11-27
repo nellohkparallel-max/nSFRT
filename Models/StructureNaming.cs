@@ -15,13 +15,20 @@ namespace SFRThelper.Models
         public const string ValleyId = "Lattice_Valley";
         /// <summary>Eclipse 16-char ID for Peak_Penumbra_Shell.</summary>
         public const string PenumbraShellId = "Peak_Penumbra";
+        /// <summary>Second-level 3 mm peak penumbra ring (after 1 mm gap).</summary>
+        public const string PenumbraShell2Id = "Peak_Penu2";
         public const string ValleyCoreId = "Valley_Core";
         public const string Ring01Id = "Ring_SFRT_0-1cm";
         public const string Ring13Id = "Ring_SFRT_1-3cm";
         public const string TempValidId = "zzSFRTtmp";
-        public const string PoiPeakCenterId = "POI_Peak_Center";
-        /// <summary>Eclipse 16-char ID for POI_Valley_Center.</summary>
-        public const string PoiValleyCenterId = "POI_Valley_Cente";
+        /// <summary>1 mm gap between target and Ring_SFRT_0-1cm inner edge.</summary>
+        public const double RingTargetGapMm = 1.0;
+        /// <summary>Gap between first and second Peak_Penumbra rings.</summary>
+        public const double SecondPenumbraGapMm = 1.0;
+        /// <summary>Thickness of the second Peak_Penumbra ring.</summary>
+        public const double SecondPenumbraThicknessMm = 3.0;
+        /// <summary>Inset applied when building sphere cores from CT-slice groups.</summary>
+        public const double SphereCoreInsetMm = 1.0;
 
         public const string DicomControl = "CONTROL";
         public const string DicomAvoidance = "AVOIDANCE";
@@ -36,6 +43,20 @@ namespace SFRThelper.Models
             if (oneBasedIndex < 100)
                 return "Peak_" + oneBasedIndex.ToString("00", CultureInfo.InvariantCulture);
             return Truncate("Peak_" + oneBasedIndex.ToString(CultureInfo.InvariantCulture));
+        }
+
+        public static string FormatPeakLayerId(int oneBasedIndex)
+        {
+            if (oneBasedIndex < 1)
+                oneBasedIndex = 1;
+            return Truncate("PeakLayer_" + oneBasedIndex.ToString("00", CultureInfo.InvariantCulture));
+        }
+
+        public static string FormatPeakCoreId(int oneBasedIndex)
+        {
+            if (oneBasedIndex < 1)
+                oneBasedIndex = 1;
+            return Truncate("PeakCore_" + oneBasedIndex.ToString("00", CultureInfo.InvariantCulture));
         }
 
         public static bool IsIndividualPeakId(string id)
