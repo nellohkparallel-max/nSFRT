@@ -46,7 +46,7 @@ namespace SFRThelper.Models
         private bool _isDirectionalSpacing;
         private bool _applyingPreset;
         private bool _generateTuningStructures = true;
-        private double _penumbraShellThicknessMm = 3.0;
+        private double _penumbraShellThicknessMm = StructureNaming.DefaultInnerShellMm;
         private double _concentricRing1Mm = 10.0;
         private double _concentricRing2Mm = 30.0;
         private double _prescriptionDoseGy = 20.0;

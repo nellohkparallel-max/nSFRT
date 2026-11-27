@@ -94,7 +94,7 @@ namespace SFRThelper.ViewModels
             {
                 new GenerationModeOption { Value = SphereGenerationMode.IndividualAndComposite, Display = "Individual Peak_xx + Lattice_Peaks" },
                 new GenerationModeOption { Value = SphereGenerationMode.CompositeOnly, Display = "Composite Lattice_Peaks only" },
-                new GenerationModeOption { Value = SphereGenerationMode.CtSliceGroupedWithCores, Display = "CT-slice groups + −1 mm cores (LatticeHelper-style)" }
+                new GenerationModeOption { Value = SphereGenerationMode.CtSliceGroupedWithCores, Display = "Lattice-plane groups + −1 mm cores (LatticeHelper)" }
             };
             ProtocolOptions = SFRTProtocolPresets.All.Select(p => new ProtocolOption
             {

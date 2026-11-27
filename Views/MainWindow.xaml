@@ -349,7 +349,7 @@
                                         <TextBox Grid.Row="0" Grid.Column="1"
                                                  Text="{Binding Parameters.PenumbraShellThicknessMm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
                                                  IsEnabled="{Binding Parameters.GenerateTuningStructures}"
-                                                 ToolTip="d_shell = d_margin (1.0–5.0 mm). Default 3.0 mm."/>
+                                                 ToolTip="Inner control / Grams z_IC thickness (1.0–5.0 mm). Default 5.0 mm."/>
                                         <TextBlock Grid.Row="1" Grid.Column="0" Text="Ring 1 outer (mm):" VerticalAlignment="Center" Margin="4"/>
                                         <TextBox Grid.Row="1" Grid.Column="1"
                                                  Text="{Binding Parameters.ConcentricRing1Mm, UpdateSourceTrigger=LostFocus, ValidatesOnDataErrors=True, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"
@@ -440,7 +440,7 @@
                         <TextBlock Text="Photon Optimizer and VMAT helpers"
                                    FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
                         <TextBlock TextWrapping="Wrap" Margin="0,0,0,12"
-                                   Text="These routines run on the Eclipse STA thread. Seed PO after Lattice_Peaks and Valley_Core (or Lattice_Valley) exist. VMAT setup uses 10X-FFF only and adds two coplanar arcs (collimators 15° and 75°) with jaw tracking."/>
+                                   Text="These routines run on the Eclipse STA thread. Seed PO after Lattice_Peaks and Valley_Core (or Lattice_Valley) exist. VMAT follows Grams / automated lattice practice: 10X-FFF @2400, isocenter on Lattice_Peaks, ±5° collimators (extra arcs when vertex count is high), jaw tracking."/>
 
                         <GroupBox Header="Plan Automation &amp; PO Seeding" Margin="0,0,0,12">
                             <Grid Margin="8">
@@ -533,7 +533,7 @@
                                 </WrapPanel>
                                 <TextBlock Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2"
                                            TextWrapping="Wrap" Margin="4,8,4,0" Foreground="#445"
-                                           Text="VMAT: two coplanar arcs, collimators 15° / 75°, technique ARC, default MLC, 10X-FFF only. Cumulative meterset weights start at 0. Peaks: Lower 100% Rx at V99 (priority 120). Valley_Core: Upper 30–40% Rx."/>
+                                           Text="VMAT: 10X-FFF @2400; arc count scales with vertices (2 + extras above 10/25/75/125); collimators ±5°/±10°/±15°; meterset weights 0→1. PO: control shells (Peak_Penumbra / Peak_Penu2 / rings) at higher priority than peaks; VMAT Grid preset uses V50% peak Lower (Grams)."/>
                             </Grid>
                         </GroupBox>
 
@@ -550,7 +550,7 @@
 
                         <GroupBox Header="Structure naming (TG-263 / 16-character Eclipse IDs)">
                             <TextBlock Margin="8" FontFamily="Consolas" TextWrapping="Wrap"
-                                       Text="Peak_01 … Peak_nn  or  PeakLayer_nn (same-CT-slice groups)&#x0a;PeakCore_nn = PeakLayer − 1 mm&#x0a;Lattice_Peaks = ∪ Peak_i&#x0a;Lattice_Valley = Target \ Lattice_Peaks&#x0a;Peak_Penumbra = (Peaks + d_shell) \ Peaks ∩ Target&#x0a;Peak_Penu2 = 3 mm ring after 1 mm gap&#x0a;Valley_Core = Target \ (Peaks + d_shell)&#x0a;Ring_SFRT_0-1cm = ((Target + r1) \ (Target + 1 mm)) ∩ External&#x0a;Ring_SFRT_1-3cm = ((Target + r2) \ (Target + r1)) ∩ External"/>
+                                       Text="Peak_01 … Peak_nn  or  PeakLayer_nn (LatticeHelper planes)&#x0a;PeakCore_nn / Lattice_Cores = peaks − 1 mm (core-focused PO)&#x0a;Lattice_Peaks = ∪ Peak_i  (VMAT isocenter)&#x0a;Lattice_Valley = Target \ Lattice_Peaks&#x0a;Peak_Penumbra ≈ Grams z_IC (Peaks + d_shell) \ Peaks ∩ Target&#x0a;Peak_Penu2 ≈ Grams z_MC (3 mm ring after 1 mm gap)&#x0a;Valley_Core = Target \ (Peaks + d_shell)&#x0a;Ring_SFRT_0-1cm = ((Target + r1) \ (Target + 1 mm)) ∩ External&#x0a;Ring_SFRT_1-3cm = ((Target + r2) \ (Target + r1)) ∩ External"/>
                         </GroupBox>
                     </StackPanel>
                 </ScrollViewer>

@@ -310,7 +310,7 @@ namespace SFRThelper.Geometry.Tests
         {
             var p = new SFRTParameters { SelectedTargetId = "GTV", SphereRadiusMm = 5, CenterSpacingMm = 15 };
             AssertTrue(p.GenerateTuningStructures, "tuning on by default");
-            AssertNear(p.PenumbraShellThicknessMm, 3.0, 1e-9, "default shell");
+            AssertNear(p.PenumbraShellThicknessMm, StructureNaming.DefaultInnerShellMm, 1e-9, "default shell 5 mm (Grams z_IC)");
             AssertNear(p.ConcentricRing1Mm, 10.0, 1e-9, "default ring1");
             AssertNear(p.ConcentricRing2Mm, 30.0, 1e-9, "default ring2");
             AssertTrue(p.IsValid, "defaults valid");
@@ -319,7 +319,7 @@ namespace SFRThelper.Geometry.Tests
             AssertTrue(!p.IsValid, "shell < 1 mm");
             p.PenumbraShellThicknessMm = 6.0;
             AssertTrue(!p.IsValid, "shell > 5 mm");
-            p.PenumbraShellThicknessMm = 3.0;
+            p.PenumbraShellThicknessMm = 5.0;
             AssertTrue(p.IsValid, "shell restored");
 
             p.ConcentricRing2Mm = 8.0;
@@ -341,18 +341,23 @@ namespace SFRThelper.Geometry.Tests
             var p = new SFRTParameters { SelectedTargetId = "GTV" };
             OptimizationObjectivePresets.Apply(p, PoObjectivePreset.UniversityOfMiami);
             AssertNear(p.ValleyUpperPercentOfRx, 30, 1e-9, "Miami valley 30");
-            AssertNear(p.PenumbraUpperPercentOfRx, 55, 1e-9, "Miami penumbra 55");
+            AssertNear(p.PenumbraUpperPercentOfRx, 95, 1e-9, "Miami z_IC 95");
 
             OptimizationObjectivePresets.Apply(p, PoObjectivePreset.MayoClinic);
             AssertNear(p.ValleyUpperPercentOfRx, 35, 1e-9, "Mayo valley 35");
-            AssertNear(p.PenumbraUpperPercentOfRx, 60, 1e-9, "Mayo penumbra 60");
+            AssertNear(p.PenumbraUpperPercentOfRx, 95, 1e-9, "Mayo z_IC 95");
 
             OptimizationObjectivePresets.Apply(p, PoObjectivePreset.Valencia);
             AssertNear(p.ValleyUpperPercentOfRx, 30, 1e-9, "Valencia valley 30");
 
             OptimizationObjectivePresets.Apply(p, PoObjectivePreset.MiniLattice);
             AssertNear(p.ValleyUpperPercentOfRx, 40, 1e-9, "Mini valley 40");
-            AssertNear(p.PenumbraUpperPercentOfRx, 60, 1e-9, "Mini penumbra 60");
+            AssertNear(p.PenumbraUpperPercentOfRx, 95, 1e-9, "Mini z_IC 95");
+
+            OptimizationObjectivePresets.Apply(p, PoObjectivePreset.VmatGrid);
+            AssertNear(p.ValleyUpperPercentOfRx, 35, 1e-9, "Grams valley 35");
+            AssertNear(p.PenumbraUpperPercentOfRx, 98, 1e-9, "Grams z_IC 98");
+            AssertNear(OptimizationObjectivePresets.Find(PoObjectivePreset.VmatGrid).PeakVolumePercent, 50.0, 1e-9, "Grams V50");
         }
 
         private static void TestPoBuildDoses()
@@ -368,24 +373,31 @@ namespace SFRThelper.Geometry.Tests
             PoPointObjective shell2 = miami.First(o => o.Role == "Peak_Penumbra_2");
             PoPointObjective ring01 = miami.First(o => o.Role == "Ring_SFRT_0-1cm");
             PoPointObjective ring13 = miami.First(o => o.Role == "Ring_SFRT_1-3cm");
-            AssertTrue(peaks.IsLower && peaks.VolumePercent == 99.0 && peaks.Priority == 120, "peaks lower V99 pri 120");
+            AssertTrue(peaks.IsLower && peaks.VolumePercent == 99.0 && peaks.Priority == 100, "peaks lower V99 pri 100");
+            AssertTrue(shell.Priority > peaks.Priority, "z_IC priority above peaks (Grams)");
             AssertNear(peaks.DoseGy, 20.0, 1e-9, "peaks 100% Rx");
             AssertNear(valley.DoseGy, 6.0, 1e-9, "Miami valley 30% of 20");
             AssertTrue(!valley.IsLower && valley.VolumePercent == 0.0, "valley upper V0");
-            AssertNear(shell.DoseGy, 11.0, 1e-9, "Miami penumbra 55% of 20");
-            AssertNear(shell2.DoseGy, 9.0, 1e-9, "second penumbra 45% of 20");
+            AssertNear(shell.DoseGy, 19.0, 1e-9, "Miami z_IC 95% of 20");
+            AssertNear(shell2.DoseGy, 10.0, 1e-9, "z_MC / Peak_Penu2 50% of 20");
             AssertTrue(shell2.StructureId == StructureNaming.PenumbraShell2Id, "Peak_Penu2 structure");
-            AssertNear(ring01.DoseGy, 9.0, 1e-9, "ring 0-1 45% of 20");
+            AssertNear(ring01.DoseGy, 8.0, 1e-9, "ring 0-1 40% of 20");
             AssertNear(ring13.DoseGy, 5.0, 1e-9, "ring 1-3 25% of 20");
+            AssertTrue(miami.Any(o => o.Role == "Lattice_Cores"), "Lattice_Cores objective present");
 
             OptimizationObjectivePresets.Apply(p, PoObjectivePreset.MayoClinic);
             IList<PoPointObjective> mayo = OptimizationObjectivePresets.Build(p);
             AssertNear(mayo.First(o => o.Role == "Valley_Core").DoseGy, 7.0, 1e-9, "Mayo valley 35% of 20");
-            AssertNear(mayo.First(o => o.Role == "Peak_Penumbra_Shell").DoseGy, 12.0, 1e-9, "Mayo penumbra 60% of 20");
+            AssertNear(mayo.First(o => o.Role == "Peak_Penumbra_Shell").DoseGy, 19.0, 1e-9, "Mayo z_IC 95% of 20");
 
             OptimizationObjectivePresets.Apply(p, PoObjectivePreset.MiniLattice);
             IList<PoPointObjective> mini = OptimizationObjectivePresets.Build(p);
             AssertNear(mini.First(o => o.Role == "Valley_Core").DoseGy, 8.0, 1e-9, "Mini valley 40% of 20");
+
+            OptimizationObjectivePresets.Apply(p, PoObjectivePreset.VmatGrid);
+            IList<PoPointObjective> grams = OptimizationObjectivePresets.Build(p);
+            AssertNear(grams.First(o => o.Role == "Lattice_Peaks").VolumePercent, 50.0, 1e-9, "Grams V50 peak");
+            AssertNear(grams.First(o => o.Role == "Peak_Penumbra_Shell").DoseGy, 19.6, 1e-9, "Grams z_IC 98% of 20");
 
             p.Oar1StructureId = "Cord";
             p.Oar1DoseLimitGy = 12.0;
@@ -554,10 +566,14 @@ namespace SFRThelper.Geometry.Tests
             AssertTrue(StructureNaming.FormatPeakCoreId(1).Length <= StructureNaming.MaxIdLength, "PeakCore length");
             AssertTrue(StructureNaming.PenumbraShell2Id == "Peak_Penu2", "Peak_Penu2 id");
             AssertTrue(StructureNaming.PenumbraShell2Id.Length <= StructureNaming.MaxIdLength, "Peak_Penu2 length");
+            AssertTrue(StructureNaming.CompositeCoresId == "Lattice_Cores", "Lattice_Cores id");
+            AssertTrue(StructureNaming.CompositeCoresId.Length <= StructureNaming.MaxIdLength, "Lattice_Cores length");
             AssertNear(StructureNaming.RingTargetGapMm, 1.0, 1e-9, "ring target gap");
             AssertNear(StructureNaming.SecondPenumbraGapMm, 1.0, 1e-9, "second penumbra gap");
             AssertNear(StructureNaming.SecondPenumbraThicknessMm, 3.0, 1e-9, "second penumbra thickness");
             AssertNear(StructureNaming.SphereCoreInsetMm, 1.0, 1e-9, "sphere core inset");
+            AssertNear(StructureNaming.DefaultInnerShellMm, 5.0, 1e-9, "Grams z_IC 5 mm");
+            AssertTrue(StructureNaming.TenXFffDoseRate == 2400, "10X-FFF 2400");
         }
 
         private static void TestUnlimitedAvoidanceOars()

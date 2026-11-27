@@ -535,13 +535,15 @@ namespace SFRThelper.Services
                 }
                 else if (createCtSliceGroups)
                 {
-                    var groups = GroupSpheresByCtSlice(included);
+                    // LatticeHelper-style occupied-plane grouping (SI pitch), falling back to CT index.
+                    var groups = GroupSpheresByLatticePlane(included, parameters);
+                    var coreStructureIds = new List<string>();
                     for (int g = 0; g < groups.Count; g++)
                     {
                         token.ThrowIfCancellationRequested();
                         var group = groups[g];
-                        Report(progress, "Creating CT-slice group " + (g + 1) + "/" + groups.Count
-                            + " (slice " + group.SliceIndex + ", " + group.Spheres.Count + " spheres)...");
+                        Report(progress, "Creating lattice-plane group " + (g + 1) + "/" + groups.Count
+                            + " (plane " + group.SliceIndex + ", " + group.Spheres.Count + " spheres)...");
                         string layerId = StructureNaming.NextAvailable(StructureNaming.FormatPeakLayerId(g + 1), existing);
                         AddTypedStructure(StructureNaming.DicomControl, layerId, transaction, existing, highRes);
                         Structure layer = Refetch(layerId);
@@ -561,6 +563,30 @@ namespace SFRThelper.Services
                             coreStructure.Color = Color.FromRgb(255, 69, 0);
                         EnsureHighResolutionById(coreIdGroup, highRes);
                         AddSphereContours(Refetch(coreIdGroup), cores);
+                        coreStructureIds.Add(coreIdGroup);
+                    }
+
+                    // Composite Lattice_Cores for core-focused PO (Grams undercoverage / LatticeHelper).
+                    if (coreStructureIds.Count > 0)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        Report(progress, "Creating composite Lattice_Cores...");
+                        string coresId = StructureNaming.NextAvailable(StructureNaming.CompositeCoresId, existing);
+                        AddTypedStructure(StructureNaming.DicomControl, coresId, transaction, existing, highRes);
+                        Structure coresComposite = Refetch(coresId);
+                        if (coresComposite != null)
+                            coresComposite.Color = Color.FromRgb(255, 99, 71);
+                        EnsureHighResolutionById(coresId, highRes);
+                        SegmentVolume coreUnion = null;
+                        for (int i = 0; i < coreStructureIds.Count; i++)
+                        {
+                            Structure corePart = Refetch(coreStructureIds[i]);
+                            if (corePart == null)
+                                continue;
+                            coreUnion = coreUnion == null ? corePart.SegmentVolume : coreUnion.Or(corePart.SegmentVolume);
+                        }
+                        if (coreUnion != null)
+                            AssignSegment(coresId, coreUnion);
                     }
                 }
 
@@ -829,14 +855,22 @@ namespace SFRThelper.Services
                     return "Plan automation is limited to 10X-FFF. Selected configuration was "
                         + machineOpt.Display + ".";
 
-                VVector iso = ResolveIsocenter(plan);
+                // Grams / automated lattice: isocenter at all_vertices (Lattice_Peaks).
+                VVector iso = ResolveLatticeIsocenter(plan);
+                int vertexCount = CountLatticeVertices();
+                int arcCount = RecommendArcCount(vertexCount);
 
                 string lastError = null;
-                if (TryAddVmatPair(plan, machineOpt, iso, out lastError))
+                int added;
+                if (TryAddVmatArcs(plan, machineOpt, iso, arcCount, out added, out lastError))
                 {
                     string jawNote = TryEnableJawTracking(plan);
-                    return "Added 2 coplanar VMAT arcs (collimators 15° / 75°, technique ARC, default MLC, 10X-FFF)"
-                        + (string.IsNullOrEmpty(jawNote) ? " and enabled jaw tracking." : ". " + jawNote);
+                    return "Added " + added.ToString(CultureInfo.InvariantCulture)
+                        + " coplanar VMAT arcs (10X-FFF @"
+                        + StructureNaming.TenXFffDoseRate.ToString(CultureInfo.InvariantCulture)
+                        + " MU/min, Grams ±5°/±10°/±15° collimators, "
+                        + vertexCount.ToString(CultureInfo.InvariantCulture) + " vertices)"
+                        + (string.IsNullOrEmpty(jawNote) ? "; jaw tracking enabled." : ". " + jawNote);
                 }
 
                 return "VMAT arc setup failed for " + machineOpt.Display + ". "
@@ -915,7 +949,20 @@ namespace SFRThelper.Services
                     }
                 }
 
+                PoObjectiveProfile profile = OptimizationObjectivePresets.Find(parameters.PoObjectivePreset);
                 IList<PoPointObjective> specs = OptimizationObjectivePresets.Build(parameters, rxGy);
+
+                // Grams: Lower on each individual Peak_xx when present (not only Lattice_Peaks).
+                if (profile.PreferIndividualPeakObjectives)
+                {
+                    foreach (string peakId in SnapshotStructureIds())
+                    {
+                        if (!StructureNaming.IsIndividualPeakId(peakId))
+                            continue;
+                        specs.Add(OptimizationObjectivePresets.BuildIndividualPeakObjective(profile, rxGy, peakId));
+                    }
+                }
+
                 int added = 0;
                 bool valleyCoreAdded = false;
                 foreach (var spec in specs)
@@ -1820,8 +1867,61 @@ namespace SFRThelper.Services
             return new VVector(0, 0, 0);
         }
 
-        private bool TryAddVmatPair(ExternalPlanSetup plan, LinacEnergyOption opt, VVector iso, out string error)
+        /// <summary>
+        /// Grams / automated lattice: place isocenter at Lattice_Peaks (all_vertices) center.
+        /// </summary>
+        private VVector ResolveLatticeIsocenter(ExternalPlanSetup plan)
         {
+            Structure peaks = FindByIdOrPrefix(StructureNaming.CompositePeaksId, "Lattice_Pe");
+            if (peaks != null && !peaks.IsEmpty)
+                return peaks.CenterPoint;
+            return ResolveIsocenter(plan);
+        }
+
+        private int CountLatticeVertices()
+        {
+            int count = 0;
+            foreach (string id in SnapshotStructureIds())
+            {
+                if (StructureNaming.IsIndividualPeakId(id))
+                    count++;
+            }
+            if (count > 0)
+                return count;
+
+            // PeakLayer_* groups or composite-only: estimate from Lattice_Peaks volume / sphere volume is unreliable;
+            // use layer count as a lower bound on occupied planes.
+            foreach (string id in SnapshotStructureIds())
+            {
+                if (id != null && id.StartsWith("PeakLayer", StringComparison.OrdinalIgnoreCase))
+                    count++;
+            }
+            return Math.Max(count, 1);
+        }
+
+        /// <summary>
+        /// Automated lattice (Med Phys 2023): start with 2 arcs; add one arc each time
+        /// vertices exceed 10, 25, 75, and 125.
+        /// </summary>
+        private static int RecommendArcCount(int vertexCount)
+        {
+            int arcs = 2;
+            if (vertexCount > 10) arcs++;
+            if (vertexCount > 25) arcs++;
+            if (vertexCount > 75) arcs++;
+            if (vertexCount > 125) arcs++;
+            return arcs;
+        }
+
+        private bool TryAddVmatArcs(
+            ExternalPlanSetup plan,
+            LinacEnergyOption opt,
+            VVector iso,
+            int arcCount,
+            out int added,
+            out string error)
+        {
+            added = 0;
             error = null;
             string energyId = opt.EnergyModeId;
             string fluence = opt.PrimaryFluenceMode;
@@ -1839,16 +1939,24 @@ namespace SFRThelper.Services
             if (string.IsNullOrEmpty(energyId))
                 energyId = display ?? "10X";
 
+            // Prefer clinical 2400 MU/min for 10X-FFF, then the selected commissioned rate.
+            var doseRates = new List<int>();
+            doseRates.Add(StructureNaming.TenXFffDoseRate);
+            if (opt.DoseRate > 0 && opt.DoseRate != StructureNaming.TenXFffDoseRate)
+                doseRates.Add(opt.DoseRate);
+
             var attempts = new List<ExternalBeamMachineParameters>();
-            // Prefer split energy + fluence (e.g. "10X" + "FFF") — required for TrueBeam FFF.
-            if (!string.IsNullOrEmpty(fluence))
-                attempts.Add(new ExternalBeamMachineParameters(opt.MachineId, energyId, opt.DoseRate, "ARC", fluence));
-            if (!string.IsNullOrEmpty(display)
-                && !string.Equals(display, energyId, StringComparison.OrdinalIgnoreCase))
+            foreach (int rate in doseRates)
             {
-                attempts.Add(new ExternalBeamMachineParameters(opt.MachineId, display, opt.DoseRate, "ARC", null));
+                if (!string.IsNullOrEmpty(fluence))
+                    attempts.Add(new ExternalBeamMachineParameters(opt.MachineId, energyId, rate, "ARC", fluence));
+                if (!string.IsNullOrEmpty(display)
+                    && !string.Equals(display, energyId, StringComparison.OrdinalIgnoreCase))
+                {
+                    attempts.Add(new ExternalBeamMachineParameters(opt.MachineId, display, rate, "ARC", null));
+                }
+                attempts.Add(new ExternalBeamMachineParameters(opt.MachineId, energyId, rate, "ARC", null));
             }
-            attempts.Add(new ExternalBeamMachineParameters(opt.MachineId, energyId, opt.DoseRate, "ARC", null));
 
             // Cumulative meterset weights must start at 0 and end at 1.
             const int controlPointCount = 178;
@@ -1856,35 +1964,65 @@ namespace SFRThelper.Services
             for (int i = 0; i < controlPointCount; i++)
                 weights.Add(controlPointCount == 1 ? 0.0 : (double)i / (controlPointCount - 1));
 
+            // Grams / automated lattice collimators: ±5°, then ±10°, ±15° for extra arcs.
+            double[] collimators = { 5.0, 355.0, 10.0, 350.0, 15.0, 345.0 };
+            if (arcCount < 2)
+                arcCount = 2;
+            if (arcCount > collimators.Length)
+                arcCount = collimators.Length;
+
             foreach (var machine in attempts)
             {
                 try
                 {
-                    plan.AddVMATBeam(machine, weights, 15.0, 181.0, 179.0, GantryDirection.Clockwise, 0.0, iso);
-                    plan.AddVMATBeam(machine, weights, 75.0, 179.0, 181.0, GantryDirection.CounterClockwise, 0.0, iso);
+                    for (int a = 0; a < arcCount; a++)
+                    {
+                        double coll = collimators[a];
+                        bool clockwise = (a % 2) == 0;
+                        if (clockwise)
+                            plan.AddVMATBeam(machine, weights, coll, 181.0, 179.0, GantryDirection.Clockwise, 0.0, iso);
+                        else
+                            plan.AddVMATBeam(machine, weights, coll, 179.0, 181.0, GantryDirection.CounterClockwise, 0.0, iso);
+                    }
+                    added = arcCount;
                     error = null;
                     return true;
                 }
                 catch (Exception ex)
                 {
                     error = ex.Message;
+                    added = 0;
                 }
             }
             return false;
         }
 
-        private List<CtSliceSphereGroup> GroupSpheresByCtSlice(IReadOnlyList<SphereModel> spheres)
+        /// <summary>
+        /// LatticeHelper occupied-plane grouping: bin by SI lattice pitch when available,
+        /// otherwise by nearest CT slice index (spheres that share CT slices).
+        /// </summary>
+        private List<CtSliceSphereGroup> GroupSpheresByLatticePlane(
+            IReadOnlyList<SphereModel> spheres,
+            SFRTParameters parameters)
         {
             var groups = new Dictionary<int, CtSliceSphereGroup>();
             ImageGeometryDto image = GetImageGeometry();
+            double pitch = parameters != null ? parameters.EffectiveSiSpacingMm : 0.0;
             foreach (var sphere in spheres)
             {
-                int slice = image != null ? image.GetNearestSliceIndex(sphere.Center.Z) : 0;
+                int plane;
+                if (pitch > 1e-6)
+                    plane = (int)Math.Round(sphere.Center.Z / pitch);
+                else if (image != null)
+                    plane = image.GetNearestSliceIndex(sphere.Center.Z);
+                else
+                    plane = 0;
+
                 CtSliceSphereGroup group;
-                if (!groups.TryGetValue(slice, out group))
+                if (!groups.TryGetValue(plane, out group))
                 {
-                    group = new CtSliceSphereGroup { SliceIndex = slice };
-                    groups[slice] = group;
+                    group = new CtSliceSphereGroup { SliceIndex = plane };
+                    groups[plane] = group;
                 }
                 group.Spheres.Add(sphere);
             }

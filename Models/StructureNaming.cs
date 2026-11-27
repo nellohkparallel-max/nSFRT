@@ -12,10 +12,12 @@ namespace SFRThelper.Models
     {
         public const int MaxIdLength = 16;
         public const string CompositePeaksId = "Lattice_Peaks";
+        /// <summary>Union of PeakCore_* for core-focused PO (Grams undercoverage / LatticeHelper cores).</summary>
+        public const string CompositeCoresId = "Lattice_Cores";
         public const string ValleyId = "Lattice_Valley";
-        /// <summary>Eclipse 16-char ID for Peak_Penumbra_Shell.</summary>
+        /// <summary>Eclipse 16-char ID for Peak_Penumbra_Shell (Grams z_IC / inner control).</summary>
         public const string PenumbraShellId = "Peak_Penumbra";
-        /// <summary>Second-level 3 mm peak penumbra ring (after 1 mm gap).</summary>
+        /// <summary>Second-level 3 mm peak penumbra ring after 1 mm gap (Grams z_MC role).</summary>
         public const string PenumbraShell2Id = "Peak_Penu2";
         public const string ValleyCoreId = "Valley_Core";
         public const string Ring01Id = "Ring_SFRT_0-1cm";
@@ -29,6 +31,10 @@ namespace SFRThelper.Models
         public const double SecondPenumbraThicknessMm = 3.0;
         /// <summary>Inset applied when building sphere cores from CT-slice groups.</summary>
         public const double SphereCoreInsetMm = 1.0;
+        /// <summary>Default Peak_Penumbra / z_IC thickness matching Grams 0.5 cm inner control.</summary>
+        public const double DefaultInnerShellMm = 5.0;
+        /// <summary>TrueBeam 10X-FFF clinical SFRT dose rate (Grams / automated lattice).</summary>
+        public const int TenXFffDoseRate = 2400;
 
         public const string DicomControl = "CONTROL";
         public const string DicomAvoidance = "AVOIDANCE";

@@ -45,6 +45,11 @@ namespace SFRThelper.Models
         UniversityOfMiami = 1,
         MayoClinic = 2,
         Valencia = 3,
-        MiniLattice = 4
+        MiniLattice = 4,
+        /// <summary>
+        /// Grams et al. VMAT Grid / automated lattice (Med Phys): V50% peaks,
+        /// concentric vertex shells z_IC/z_MC/z_OC, control-shell priorities above peaks.
+        /// </summary>
+        VmatGrid = 5
     }
 }
