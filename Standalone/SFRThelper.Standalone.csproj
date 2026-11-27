@@ -71,6 +71,9 @@
     <Compile Include="..\Helpers\SfrtMetricsCalculator.cs">
       <Link>Helpers\SfrtMetricsCalculator.cs</Link>
     </Compile>
+    <Compile Include="..\Models\AvoidanceOarEntry.cs">
+      <Link>Models\AvoidanceOarEntry.cs</Link>
+    </Compile>
     <Compile Include="..\Models\BoundingBox3D.cs">
       <Link>Models\BoundingBox3D.cs</Link>
     </Compile>

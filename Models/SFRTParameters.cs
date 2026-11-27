@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
@@ -31,8 +33,6 @@ namespace SFRThelper.Models
         private double _lateralSpacingMm = DefaultCenterSpacingMm;
         private double _siSpacingMm = DefaultCenterSpacingMm;
         private double _targetClearanceMm = DefaultTargetClearanceMm;
-        private double _oar1ClearanceMm = DefaultOarClearanceMm;
-        private double _oar2ClearanceMm = DefaultOarClearanceMm;
         private double _externalClearanceMm = DefaultExternalClearanceMm;
         private double _gridRotationDeg = DefaultGridRotationDeg;
         private int _maxSphereCount = 500;
@@ -40,31 +40,30 @@ namespace SFRThelper.Models
         private int _maxIterations = 100;
         private SphereMaximizationStrategy _optimizationStrategy = SphereMaximizationStrategy.RigidPhaseShift;
         private string _selectedTargetId;
-        private string _oar1StructureId = StructureListItem.NoneId;
-        private string _oar2StructureId = StructureListItem.NoneId;
         private PackingGeometryMode _packingMode = PackingGeometryMode.HexagonalClosePacking;
         private SphereGenerationMode _generationMode = SphereGenerationMode.IndividualAndComposite;
         private ClinicalProtocolPreset _preset = ClinicalProtocolPreset.Custom;
         private bool _isDirectionalSpacing;
         private bool _applyingPreset;
         private bool _generateTuningStructures = true;
-        private double _penumbraShellThicknessMm = 3.0;
+        private double _penumbraShellThicknessMm = StructureNaming.DefaultInnerShellMm;
         private double _concentricRing1Mm = 10.0;
         private double _concentricRing2Mm = 30.0;
         private double _prescriptionDoseGy = 20.0;
         private int _fractionCount = 1;
-        private PoObjectivePreset _poObjectivePreset = PoObjectivePreset.UniversityOfMiami;
+        private PoObjectivePreset _poObjectivePreset = PoObjectivePreset.VmatGrid;
         private bool _autoEnableJawTracking = true;
         private bool _clearExistingObjectives = true;
         private double _valleyUpperPercentOfRx = 30.0;
         private double _penumbraUpperPercentOfRx = 55.0;
-        private double _oar1DoseLimitGy = 14.0;
-        private double _oar2DoseLimitGy = 14.0;
         private string _selectedMachineId;
         private string _selectedEnergyMode;
         private string _selectedPrimaryFluenceMode;
         private int _selectedDoseRate;
         private readonly Dictionary<string, List<string>> _errors = new Dictionary<string, List<string>>();
+
+        /// <summary>Selected avoidance organs (unlimited). Empty slots use StructureListItem.NoneId.</summary>
+        public ObservableCollection<AvoidanceOarEntry> AvoidanceOars { get; private set; }
 
         public double SphereRadiusMm
         {
@@ -204,30 +203,14 @@ namespace SFRThelper.Models
 
         public double Oar1ClearanceMm
         {
-            get { return _oar1ClearanceMm; }
-            set
-            {
-                if (NearlyEqual(_oar1ClearanceMm, value))
-                    return;
-                _oar1ClearanceMm = value;
-                OnPropertyChanged(nameof(Oar1ClearanceMm));
-                OnPropertyChanged(nameof(AvoidanceOar1ClearanceMm));
-                ValidateAll();
-            }
+            get { return GetOarClearance(0); }
+            set { SetOarClearance(0, value); OnPropertyChanged(nameof(Oar1ClearanceMm)); OnPropertyChanged(nameof(AvoidanceOar1ClearanceMm)); }
         }
 
         public double Oar2ClearanceMm
         {
-            get { return _oar2ClearanceMm; }
-            set
-            {
-                if (NearlyEqual(_oar2ClearanceMm, value))
-                    return;
-                _oar2ClearanceMm = value;
-                OnPropertyChanged(nameof(Oar2ClearanceMm));
-                OnPropertyChanged(nameof(AvoidanceOar2ClearanceMm));
-                ValidateAll();
-            }
+            get { return GetOarClearance(1); }
+            set { SetOarClearance(1, value); OnPropertyChanged(nameof(Oar2ClearanceMm)); OnPropertyChanged(nameof(AvoidanceOar2ClearanceMm)); }
         }
 
         public string SelectedTargetId
@@ -252,12 +235,12 @@ namespace SFRThelper.Models
 
         public string Oar1StructureId
         {
-            get { return _oar1StructureId; }
+            get { return GetOarStructureId(0); }
             set
             {
-                if (_oar1StructureId == value)
+                if (GetOarStructureId(0) == (value ?? StructureListItem.NoneId))
                     return;
-                _oar1StructureId = value ?? StructureListItem.NoneId;
+                SetOarStructureId(0, value);
                 OnPropertyChanged(nameof(Oar1StructureId));
                 OnPropertyChanged(nameof(AvoidanceOar1Id));
                 ValidateAll();
@@ -266,12 +249,12 @@ namespace SFRThelper.Models
 
         public string Oar2StructureId
         {
-            get { return _oar2StructureId; }
+            get { return GetOarStructureId(1); }
             set
             {
-                if (_oar2StructureId == value)
+                if (GetOarStructureId(1) == (value ?? StructureListItem.NoneId))
                     return;
-                _oar2StructureId = value ?? StructureListItem.NoneId;
+                SetOarStructureId(1, value);
                 OnPropertyChanged(nameof(Oar2StructureId));
                 OnPropertyChanged(nameof(AvoidanceOar2Id));
                 ValidateAll();
@@ -367,12 +350,12 @@ namespace SFRThelper.Models
 
         public bool HasOar1
         {
-            get { return !string.IsNullOrWhiteSpace(Oar1StructureId) && Oar1StructureId != StructureListItem.NoneId; }
+            get { return HasOarAt(0); }
         }
 
         public bool HasOar2
         {
-            get { return !string.IsNullOrWhiteSpace(Oar2StructureId) && Oar2StructureId != StructureListItem.NoneId; }
+            get { return HasOarAt(1); }
         }
 
         public double TargetContractionMm
@@ -388,6 +371,15 @@ namespace SFRThelper.Models
         public double Oar2ExpansionMm
         {
             get { return Oar2ClearanceMm + SphereRadiusMm; }
+        }
+
+        /// <summary>All selected (non-None) avoidance organs.</summary>
+        public IReadOnlyList<AvoidanceOarEntry> SelectedAvoidanceOars
+        {
+            get
+            {
+                return AvoidanceOars.Where(o => o != null && o.IsSelected).ToList();
+            }
         }
 
         public double ExternalBoundaryClearanceMm
@@ -619,28 +611,26 @@ namespace SFRThelper.Models
 
         public double Oar1DoseLimitGy
         {
-            get { return _oar1DoseLimitGy; }
-            set
-            {
-                if (NearlyEqual(_oar1DoseLimitGy, value))
-                    return;
-                _oar1DoseLimitGy = value;
-                OnPropertyChanged(nameof(Oar1DoseLimitGy));
-                ValidateAll();
-            }
+            get { return GetOarDoseLimit(0); }
+            set { SetOarDoseLimit(0, value); OnPropertyChanged(nameof(Oar1DoseLimitGy)); ValidateAll(); }
         }
 
         public double Oar2DoseLimitGy
         {
-            get { return _oar2DoseLimitGy; }
-            set
-            {
-                if (NearlyEqual(_oar2DoseLimitGy, value))
-                    return;
-                _oar2DoseLimitGy = value;
-                OnPropertyChanged(nameof(Oar2DoseLimitGy));
-                ValidateAll();
-            }
+            get { return GetOarDoseLimit(1); }
+            set { SetOarDoseLimit(1, value); OnPropertyChanged(nameof(Oar2DoseLimitGy)); ValidateAll(); }
+        }
+
+        public void AddAvoidanceOar()
+        {
+            AvoidanceOars.Add(new AvoidanceOarEntry());
+        }
+
+        public bool RemoveAvoidanceOar(AvoidanceOarEntry entry)
+        {
+            if (entry == null || !AvoidanceOars.Contains(entry))
+                return false;
+            return AvoidanceOars.Remove(entry);
         }
 
         public string SelectedMachineId
@@ -731,7 +721,104 @@ namespace SFRThelper.Models
 
         public SFRTParameters()
         {
+            AvoidanceOars = new ObservableCollection<AvoidanceOarEntry>();
+            AvoidanceOars.CollectionChanged += AvoidanceOars_CollectionChanged;
+            // Start with two editable slots so legacy OAR 1 / OAR 2 bindings keep working.
+            AddAvoidanceOar();
+            AddAvoidanceOar();
             ValidateAll();
+        }
+
+        private void AvoidanceOars_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (e.NewItems != null)
+            {
+                foreach (AvoidanceOarEntry entry in e.NewItems)
+                {
+                    if (entry != null)
+                        entry.PropertyChanged += AvoidanceOar_PropertyChanged;
+                }
+            }
+            if (e.OldItems != null)
+            {
+                foreach (AvoidanceOarEntry entry in e.OldItems)
+                {
+                    if (entry != null)
+                        entry.PropertyChanged -= AvoidanceOar_PropertyChanged;
+                }
+            }
+            OnPropertyChanged(nameof(SelectedAvoidanceOars));
+            OnPropertyChanged(nameof(Oar1StructureId));
+            OnPropertyChanged(nameof(Oar2StructureId));
+            ValidateAll();
+        }
+
+        private void AvoidanceOar_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            OnPropertyChanged(nameof(SelectedAvoidanceOars));
+            OnPropertyChanged(nameof(Oar1StructureId));
+            OnPropertyChanged(nameof(Oar2StructureId));
+            OnPropertyChanged(nameof(Oar1ClearanceMm));
+            OnPropertyChanged(nameof(Oar2ClearanceMm));
+            OnPropertyChanged(nameof(Oar1DoseLimitGy));
+            OnPropertyChanged(nameof(Oar2DoseLimitGy));
+            OnPropertyChanged(nameof(AvoidanceOar1Id));
+            OnPropertyChanged(nameof(AvoidanceOar2Id));
+            ValidateAll();
+        }
+
+        private void EnsureOarSlot(int index)
+        {
+            while (AvoidanceOars.Count <= index)
+                AddAvoidanceOar();
+        }
+
+        private string GetOarStructureId(int index)
+        {
+            if (index < 0 || index >= AvoidanceOars.Count || AvoidanceOars[index] == null)
+                return StructureListItem.NoneId;
+            return AvoidanceOars[index].StructureId ?? StructureListItem.NoneId;
+        }
+
+        private void SetOarStructureId(int index, string value)
+        {
+            EnsureOarSlot(index);
+            AvoidanceOars[index].StructureId = value ?? StructureListItem.NoneId;
+        }
+
+        private double GetOarClearance(int index)
+        {
+            if (index < 0 || index >= AvoidanceOars.Count || AvoidanceOars[index] == null)
+                return DefaultOarClearanceMm;
+            return AvoidanceOars[index].ClearanceMm;
+        }
+
+        private void SetOarClearance(int index, double value)
+        {
+            EnsureOarSlot(index);
+            AvoidanceOars[index].ClearanceMm = value;
+            ValidateAll();
+        }
+
+        private double GetOarDoseLimit(int index)
+        {
+            if (index < 0 || index >= AvoidanceOars.Count || AvoidanceOars[index] == null)
+                return 14.0;
+            return AvoidanceOars[index].DoseLimitGy;
+        }
+
+        private void SetOarDoseLimit(int index, double value)
+        {
+            EnsureOarSlot(index);
+            AvoidanceOars[index].DoseLimitGy = value;
+        }
+
+        private bool HasOarAt(int index)
+        {
+            return index >= 0
+                && index < AvoidanceOars.Count
+                && AvoidanceOars[index] != null
+                && AvoidanceOars[index].IsSelected;
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -947,12 +1034,21 @@ namespace SFRThelper.Models
         private List<string> ValidateOars()
         {
             var errors = new List<string>();
-            if (HasOar1 && string.Equals(Oar1StructureId, SelectedTargetId, StringComparison.OrdinalIgnoreCase))
-                errors.Add("OAR Avoidance 1 cannot be the target structure.");
-            if (HasOar2 && string.Equals(Oar2StructureId, SelectedTargetId, StringComparison.OrdinalIgnoreCase))
-                errors.Add("OAR Avoidance 2 cannot be the target structure.");
-            if (HasOar1 && HasOar2 && string.Equals(Oar1StructureId, Oar2StructureId, StringComparison.OrdinalIgnoreCase))
-                errors.Add("OAR Avoidance 1 and 2 must be different structures.");
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < AvoidanceOars.Count; i++)
+            {
+                AvoidanceOarEntry entry = AvoidanceOars[i];
+                if (entry == null || !entry.IsSelected)
+                    continue;
+                if (string.Equals(entry.StructureId, SelectedTargetId, StringComparison.OrdinalIgnoreCase))
+                    errors.Add("OAR Avoidance " + (i + 1) + " cannot be the target structure.");
+                if (!seen.Add(entry.StructureId))
+                    errors.Add("Avoidance organ '" + entry.StructureId + "' is selected more than once.");
+                if (double.IsNaN(entry.ClearanceMm) || entry.ClearanceMm < 0)
+                    errors.Add("OAR Avoidance " + (i + 1) + " clearance must be ≥ 0 mm.");
+                if (double.IsNaN(entry.DoseLimitGy) || entry.DoseLimitGy < 0)
+                    errors.Add("OAR Avoidance " + (i + 1) + " Dmax must be ≥ 0 Gy.");
+            }
             return errors.Count == 0 ? null : errors;
         }
 

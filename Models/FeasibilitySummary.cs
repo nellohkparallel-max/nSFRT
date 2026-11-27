@@ -20,6 +20,7 @@ namespace SFRThelper.Models
         public double Oar2ClearanceMm { get; set; }
         public string Oar1Id { get; set; }
         public string Oar2Id { get; set; }
+        public List<string> AvoidanceOarSummaries { get; set; }
         public PackingGeometryMode PackingMode { get; set; }
         public bool VolumeFractionOutOfRange { get; set; }
         public bool SpacingInvalid { get; set; }
@@ -32,6 +33,7 @@ namespace SFRThelper.Models
         public FeasibilitySummary()
         {
             Warnings = new List<string>();
+            AvoidanceOarSummaries = new List<string>();
         }
 
         public string SummaryText
@@ -50,11 +52,19 @@ namespace SFRThelper.Models
                 sb.AppendLine("Target internal clearance: " + Format(TargetClearanceMm) + " mm");
                 sb.AppendLine("Skin / external clearance: " + Format(ExternalClearanceMm) + " mm"
                     + (string.IsNullOrEmpty(BodyId) ? "  (no EXTERNAL)" : "  (" + BodyId + ")"));
-                sb.AppendLine("OAR 1 clearance: " + Format(Oar1ClearanceMm) + " mm"
-                    + (string.IsNullOrEmpty(Oar1Id) ? "  (none)" : "  (" + Oar1Id + ")"));
-                sb.AppendLine("OAR 2 clearance: " + Format(Oar2ClearanceMm) + " mm"
-                    + (string.IsNullOrEmpty(Oar2Id) ? "  (none)" : "  (" + Oar2Id + ")"));
-                    sb.AppendLine("Packing: " + SphereOptimizerLabel(PackingMode));
+                if (AvoidanceOarSummaries != null && AvoidanceOarSummaries.Count > 0)
+                {
+                    for (int i = 0; i < AvoidanceOarSummaries.Count; i++)
+                        sb.AppendLine("OAR " + (i + 1) + ": " + AvoidanceOarSummaries[i]);
+                }
+                else
+                {
+                    sb.AppendLine("OAR 1 clearance: " + Format(Oar1ClearanceMm) + " mm"
+                        + (string.IsNullOrEmpty(Oar1Id) ? "  (none)" : "  (" + Oar1Id + ")"));
+                    sb.AppendLine("OAR 2 clearance: " + Format(Oar2ClearanceMm) + " mm"
+                        + (string.IsNullOrEmpty(Oar2Id) ? "  (none)" : "  (" + Oar2Id + ")"));
+                }
+                sb.AppendLine("Packing: " + SphereOptimizerLabel(PackingMode));
                 if (!string.IsNullOrEmpty(MaximizationSummary))
                     sb.AppendLine(MaximizationSummary);
                 if (!HasValidVolume)

@@ -9,6 +9,7 @@
     <AssemblyName>SFRThelper.Geometry.Tests</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\Models\AvoidanceOarEntry.cs" Link="Models\AvoidanceOarEntry.cs" />
     <Compile Include="..\..\Models\BoundingBox3D.cs" Link="Models\BoundingBox3D.cs" />
     <Compile Include="..\..\Models\Enums.cs" Link="Models\Enums.cs" />
     <Compile Include="..\..\Models\FeasibilitySummary.cs" Link="Models\FeasibilitySummary.cs" />

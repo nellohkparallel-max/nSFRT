@@ -20,20 +20,34 @@ namespace SFRThelper.Models
         public PoObjectivePreset Id { get; set; }
         public string DisplayName { get; set; }
         public double ValleyUpperFraction { get; set; }
+        /// <summary>Peak_Penumbra / Grams z_IC upper dose as fraction of Rx.</summary>
         public double PenumbraUpperFraction { get; set; }
+        /// <summary>Peak_Penu2 / Grams z_MC upper dose as fraction of Rx (typically ~0.50).</summary>
+        public double MiddleShellUpperFraction { get; set; }
         public double Ring01UpperFraction { get; set; }
         public double Ring13UpperFraction { get; set; }
+        /// <summary>
+        /// Peak Lower volume %. Institutional protocols often use ~99%;
+        /// Grams VMAT Grid intentionally undercovers at ~50% so dose collapses into the core.
+        /// </summary>
         public double PeakVolumePercent { get; set; }
         public double PeakPriority { get; set; }
         public double ValleyPriority { get; set; }
         public double PenumbraPriority { get; set; }
+        public double MiddleShellPriority { get; set; }
         public double Ring01Priority { get; set; }
         public double Ring13Priority { get; set; }
         public double OarPriority { get; set; }
+        /// <summary>When true, seed Lower on PeakCore_/Lattice_Cores in addition to Lattice_Peaks.</summary>
+        public bool PreferCoreLowerObjectives { get; set; }
+        /// <summary>When true, seed Lower on each Peak_xx (Grams individual-sphere workflow).</summary>
+        public bool PreferIndividualPeakObjectives { get; set; }
     }
 
     /// <summary>
     /// Protocol-tailored Photon Optimizer point objectives. Pure POCOs — no VMS types.
+    /// Concentric vertex-shell fractions follow Grams et al. (PRO 2021) and automated
+    /// lattice planning (Med Phys 2023): z_IC / z_MC / z_OC with control priorities ≥ peaks.
     /// </summary>
     public static class OptimizationObjectivePresets
     {
@@ -44,80 +58,120 @@ namespace SFRThelper.Models
                 Id = PoObjectivePreset.UniversityOfMiami,
                 DisplayName = "Miami [100% / 30%]",
                 ValleyUpperFraction = 0.30,
-                PenumbraUpperFraction = 0.55,
-                Ring01UpperFraction = 0.45,
+                PenumbraUpperFraction = 0.95,
+                MiddleShellUpperFraction = 0.50,
+                Ring01UpperFraction = 0.40,
                 Ring13UpperFraction = 0.25,
                 PeakVolumePercent = 99.0,
-                PeakPriority = 120,
-                ValleyPriority = 90,
-                PenumbraPriority = 70,
-                Ring01Priority = 60,
-                Ring13Priority = 50,
-                OarPriority = 80
+                PeakPriority = 100,
+                ValleyPriority = 110,
+                PenumbraPriority = 125,
+                MiddleShellPriority = 125,
+                Ring01Priority = 110,
+                Ring13Priority = 100,
+                OarPriority = 120,
+                PreferCoreLowerObjectives = true,
+                PreferIndividualPeakObjectives = true
             },
             new PoObjectiveProfile
             {
                 Id = PoObjectivePreset.MayoClinic,
                 DisplayName = "Mayo [100% / 35%]",
                 ValleyUpperFraction = 0.35,
-                PenumbraUpperFraction = 0.60,
-                Ring01UpperFraction = 0.45,
+                PenumbraUpperFraction = 0.95,
+                MiddleShellUpperFraction = 0.50,
+                Ring01UpperFraction = 0.40,
                 Ring13UpperFraction = 0.25,
                 PeakVolumePercent = 99.0,
-                PeakPriority = 120,
-                ValleyPriority = 85,
-                PenumbraPriority = 70,
-                Ring01Priority = 60,
-                Ring13Priority = 50,
-                OarPriority = 80
+                PeakPriority = 100,
+                ValleyPriority = 110,
+                PenumbraPriority = 125,
+                MiddleShellPriority = 125,
+                Ring01Priority = 110,
+                Ring13Priority = 100,
+                OarPriority = 120,
+                PreferCoreLowerObjectives = true,
+                PreferIndividualPeakObjectives = true
             },
             new PoObjectiveProfile
             {
                 Id = PoObjectivePreset.Valencia,
                 DisplayName = "Valencia [100% / 30%]",
                 ValleyUpperFraction = 0.30,
-                PenumbraUpperFraction = 0.55,
-                Ring01UpperFraction = 0.45,
+                PenumbraUpperFraction = 0.95,
+                MiddleShellUpperFraction = 0.50,
+                Ring01UpperFraction = 0.40,
                 Ring13UpperFraction = 0.25,
                 PeakVolumePercent = 99.0,
-                PeakPriority = 120,
-                ValleyPriority = 90,
-                PenumbraPriority = 70,
-                Ring01Priority = 60,
-                Ring13Priority = 50,
-                OarPriority = 80
+                PeakPriority = 100,
+                ValleyPriority = 110,
+                PenumbraPriority = 125,
+                MiddleShellPriority = 125,
+                Ring01Priority = 110,
+                Ring13Priority = 100,
+                OarPriority = 120,
+                PreferCoreLowerObjectives = true,
+                PreferIndividualPeakObjectives = true
             },
             new PoObjectiveProfile
             {
                 Id = PoObjectivePreset.MiniLattice,
                 DisplayName = "Mini-Lattice [100% / 40%]",
                 ValleyUpperFraction = 0.40,
-                PenumbraUpperFraction = 0.60,
-                Ring01UpperFraction = 0.45,
+                PenumbraUpperFraction = 0.95,
+                MiddleShellUpperFraction = 0.50,
+                Ring01UpperFraction = 0.40,
                 Ring13UpperFraction = 0.25,
                 PeakVolumePercent = 99.0,
-                PeakPriority = 120,
-                ValleyPriority = 80,
-                PenumbraPriority = 70,
-                Ring01Priority = 60,
-                Ring13Priority = 50,
-                OarPriority = 80
+                PeakPriority = 100,
+                ValleyPriority = 100,
+                PenumbraPriority = 125,
+                MiddleShellPriority = 125,
+                Ring01Priority = 110,
+                Ring13Priority = 100,
+                OarPriority = 120,
+                PreferCoreLowerObjectives = true,
+                PreferIndividualPeakObjectives = true
+            },
+            new PoObjectiveProfile
+            {
+                Id = PoObjectivePreset.VmatGrid,
+                DisplayName = "VMAT Grid / Grams [V50% / shells]",
+                ValleyUpperFraction = 0.35,
+                PenumbraUpperFraction = 0.98,
+                MiddleShellUpperFraction = 0.50,
+                Ring01UpperFraction = 0.40,
+                Ring13UpperFraction = 0.25,
+                PeakVolumePercent = 50.0,
+                PeakPriority = 100,
+                ValleyPriority = 125,
+                PenumbraPriority = 150,
+                MiddleShellPriority = 150,
+                Ring01Priority = 150,
+                Ring13Priority = 150,
+                OarPriority = 125,
+                PreferCoreLowerObjectives = true,
+                PreferIndividualPeakObjectives = true
             },
             new PoObjectiveProfile
             {
                 Id = PoObjectivePreset.Custom,
                 DisplayName = "Custom",
                 ValleyUpperFraction = 0.33,
-                PenumbraUpperFraction = 0.55,
-                Ring01UpperFraction = 0.45,
+                PenumbraUpperFraction = 0.95,
+                MiddleShellUpperFraction = 0.50,
+                Ring01UpperFraction = 0.40,
                 Ring13UpperFraction = 0.25,
                 PeakVolumePercent = 99.0,
-                PeakPriority = 120,
-                ValleyPriority = 85,
-                PenumbraPriority = 70,
-                Ring01Priority = 60,
-                Ring13Priority = 50,
-                OarPriority = 80
+                PeakPriority = 100,
+                ValleyPriority = 110,
+                PenumbraPriority = 125,
+                MiddleShellPriority = 125,
+                Ring01Priority = 110,
+                Ring13Priority = 100,
+                OarPriority = 120,
+                PreferCoreLowerObjectives = true,
+                PreferIndividualPeakObjectives = true
             }
         };
 
@@ -179,7 +233,11 @@ namespace SFRThelper.Models
             double penumbraFrac = parameters.PenumbraUpperPercentOfRx / 100.0;
             if (penumbraFrac <= 0)
                 penumbraFrac = profile.PenumbraUpperFraction;
+            double middleFrac = profile.MiddleShellUpperFraction;
+            if (middleFrac <= 0)
+                middleFrac = 0.50;
 
+            // Composite peaks (always). Individual Peak_xx / PeakCore added by seeder when present.
             list.Add(new PoPointObjective
             {
                 Role = "Lattice_Peaks",
@@ -191,6 +249,22 @@ namespace SFRThelper.Models
                 Priority = profile.PeakPriority,
                 Required = true
             });
+
+            if (profile.PreferCoreLowerObjectives)
+            {
+                list.Add(new PoPointObjective
+                {
+                    Role = "Lattice_Cores",
+                    StructureId = StructureNaming.CompositeCoresId,
+                    StructurePrefix = "Lattice_Co",
+                    IsLower = true,
+                    DoseGy = rx,
+                    VolumePercent = Math.Max(profile.PeakVolumePercent, 95.0),
+                    Priority = profile.PeakPriority + 20,
+                    Required = false
+                });
+            }
+
             list.Add(new PoPointObjective
             {
                 Role = "Valley_Core",
@@ -213,6 +287,8 @@ namespace SFRThelper.Models
                 Priority = profile.ValleyPriority,
                 Required = false
             });
+
+            // Grams z_IC: steep inner shell — Upper V0 at ~95–98% Rx, high priority.
             list.Add(new PoPointObjective
             {
                 Role = "Peak_Penumbra_Shell",
@@ -224,6 +300,21 @@ namespace SFRThelper.Models
                 Priority = profile.PenumbraPriority,
                 Required = false
             });
+
+            // Grams z_MC: Peak_Penu2 shell 5–10 mm from peaks — Upper V0 at ~50% Rx.
+            list.Add(new PoPointObjective
+            {
+                Role = "Peak_Penumbra_2",
+                StructureId = StructureNaming.PenumbraShell2Id,
+                StructurePrefix = "Peak_Penu2",
+                IsLower = false,
+                DoseGy = middleFrac * rx,
+                VolumePercent = 0.0,
+                Priority = profile.MiddleShellPriority,
+                Required = false
+            });
+
+            // Target-centric rings (institutional SFRT) — role analogous to z_OC outside GTV.
             list.Add(new PoPointObjective
             {
                 Role = "Ring_SFRT_0-1cm",
@@ -247,36 +338,46 @@ namespace SFRThelper.Models
                 Required = false
             });
 
-            if (parameters.HasOar1 && parameters.Oar1DoseLimitGy > 0)
+            int oarIndex = 1;
+            foreach (AvoidanceOarEntry oar in parameters.SelectedAvoidanceOars)
             {
+                if (oar.DoseLimitGy <= 0)
+                    continue;
                 list.Add(new PoPointObjective
                 {
-                    Role = "OAR Avoidance 1",
-                    StructureId = parameters.Oar1StructureId,
-                    StructurePrefix = parameters.Oar1StructureId,
+                    Role = "OAR Avoidance " + oarIndex,
+                    StructureId = oar.StructureId,
+                    StructurePrefix = oar.StructureId,
                     IsLower = false,
-                    DoseGy = parameters.Oar1DoseLimitGy,
+                    DoseGy = oar.DoseLimitGy,
                     VolumePercent = 0.0,
                     Priority = profile.OarPriority,
                     Required = false
                 });
-            }
-            if (parameters.HasOar2 && parameters.Oar2DoseLimitGy > 0)
-            {
-                list.Add(new PoPointObjective
-                {
-                    Role = "OAR Avoidance 2",
-                    StructureId = parameters.Oar2StructureId,
-                    StructurePrefix = parameters.Oar2StructureId,
-                    IsLower = false,
-                    DoseGy = parameters.Oar2DoseLimitGy,
-                    VolumePercent = 0.0,
-                    Priority = profile.OarPriority,
-                    Required = false
-                });
+                oarIndex++;
             }
 
             return list;
+        }
+
+        /// <summary>
+        /// Grams individual-sphere Lower objectives (Peak_01…Peak_nn) at the same V%/Rx as Lattice_Peaks.
+        /// </summary>
+        public static PoPointObjective BuildIndividualPeakObjective(PoObjectiveProfile profile, double rxGy, string peakId)
+        {
+            if (profile == null)
+                profile = Find(PoObjectivePreset.Custom);
+            return new PoPointObjective
+            {
+                Role = "Individual_Peak",
+                StructureId = peakId,
+                StructurePrefix = peakId,
+                IsLower = true,
+                DoseGy = rxGy,
+                VolumePercent = profile.PeakVolumePercent,
+                Priority = profile.PeakPriority,
+                Required = false
+            };
         }
     }
 }

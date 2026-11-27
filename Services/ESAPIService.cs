@@ -341,8 +341,6 @@ namespace SFRThelper.Services
             {
                 Image = GetImageGeometry(),
                 TargetId = parameters != null ? parameters.SelectedTargetId : null,
-                Oar1Id = parameters != null && parameters.HasOar1 ? parameters.Oar1StructureId : null,
-                Oar2Id = parameters != null && parameters.HasOar2 ? parameters.Oar2StructureId : null,
                 ValidVolume = VoxelMask.Empty()
             };
 
@@ -364,18 +362,21 @@ namespace SFRThelper.Services
                 return context;
             }
 
-            Structure oar1 = parameters.HasOar1 ? GetStructure(parameters.Oar1StructureId) : null;
-            Structure oar2 = parameters.HasOar2 ? GetStructure(parameters.Oar2StructureId) : null;
-            if (parameters.HasOar1 && oar1 == null)
+            var selectedOars = parameters.SelectedAvoidanceOars;
+            var resolvedOars = new List<Tuple<AvoidanceOarEntry, Structure>>();
+            for (int i = 0; i < selectedOars.Count; i++)
             {
-                context.Message = "OAR Avoidance 1 was not found.";
-                return context;
+                Structure oarStructure = GetStructure(selectedOars[i].StructureId);
+                if (oarStructure == null)
+                {
+                    context.Message = "OAR Avoidance '" + selectedOars[i].StructureId + "' was not found.";
+                    return context;
+                }
+                resolvedOars.Add(Tuple.Create(selectedOars[i], oarStructure));
+                context.AvoidanceOarIds.Add(selectedOars[i].StructureId);
             }
-            if (parameters.HasOar2 && oar2 == null)
-            {
-                context.Message = "OAR Avoidance 2 was not found.";
-                return context;
-            }
+            context.Oar1Id = context.AvoidanceOarIds.Count > 0 ? context.AvoidanceOarIds[0] : null;
+            context.Oar2Id = context.AvoidanceOarIds.Count > 1 ? context.AvoidanceOarIds[1] : null;
 
             context.TargetVolumeCc = target.Volume;
             context.TargetIsHighResolution = target.IsHighResolution;
@@ -400,8 +401,7 @@ namespace SFRThelper.Services
                 token.ThrowIfCancellationRequested();
 
                 bool highRes = target.IsHighResolution
-                    || (oar1 != null && oar1.IsHighResolution)
-                    || (oar2 != null && oar2.IsHighResolution)
+                    || resolvedOars.Any(o => o.Item2.IsHighResolution)
                     || (body != null && body.IsHighResolution);
 
                 Structure workTarget = EnsureWorkingCopy(target, "zzSFRTt", highRes, temps);
@@ -415,16 +415,10 @@ namespace SFRThelper.Services
                 }
 
                 SegmentVolume exclusion = null;
-                if (oar1 != null)
+                for (int i = 0; i < resolvedOars.Count; i++)
                 {
-                    Structure workOar1 = EnsureWorkingCopy(oar1, "zzSFRTo1", highRes, temps);
-                    SegmentVolume expanded = workOar1.Margin(parameters.Oar1ExpansionMm);
-                    exclusion = expanded;
-                }
-                if (oar2 != null)
-                {
-                    Structure workOar2 = EnsureWorkingCopy(oar2, "zzSFRTo2", highRes, temps);
-                    SegmentVolume expanded = workOar2.Margin(parameters.Oar2ExpansionMm);
+                    Structure workOar = EnsureWorkingCopy(resolvedOars[i].Item2, "zzSFRTo" + i, highRes, temps);
+                    SegmentVolume expanded = workOar.Margin(resolvedOars[i].Item1.ExpansionMm(parameters.SphereRadiusMm));
                     exclusion = exclusion == null ? expanded : exclusion.Or(expanded);
                 }
 
@@ -510,13 +504,14 @@ namespace SFRThelper.Services
                 return result;
             }
 
-            var transaction = new StructureTransaction();
+                var transaction = new StructureTransaction();
             try
             {
                 target = EnsureHighResolutionById(targetId, true);
                 bool highRes = target != null && target.IsHighResolution;
                 var existing = ExistingIds();
                 bool createIndividuals = parameters.GenerationMode == SphereGenerationMode.IndividualAndComposite;
+                bool createCtSliceGroups = parameters.GenerationMode == SphereGenerationMode.CtSliceGroupedWithCores;
                 var peakIds = new List<string>();
 
                 if (createIndividuals)
@@ -538,6 +533,62 @@ namespace SFRThelper.Services
                         peakIds.Add(id);
                     }
                 }
+                else if (createCtSliceGroups)
+                {
+                    // LatticeHelper-style occupied-plane grouping (SI pitch), falling back to CT index.
+                    var groups = GroupSpheresByLatticePlane(included, parameters);
+                    var coreStructureIds = new List<string>();
+                    for (int g = 0; g < groups.Count; g++)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        var group = groups[g];
+                        Report(progress, "Creating lattice-plane group " + (g + 1) + "/" + groups.Count
+                            + " (plane " + group.SliceIndex + ", " + group.Spheres.Count + " spheres)...");
+                        string layerId = StructureNaming.NextAvailable(StructureNaming.FormatPeakLayerId(g + 1), existing);
+                        AddTypedStructure(StructureNaming.DicomControl, layerId, transaction, existing, highRes);
+                        Structure layer = Refetch(layerId);
+                        if (layer != null)
+                            layer.Color = Colors.Gold;
+                        EnsureHighResolutionById(layerId, highRes);
+                        AddSphereContours(Refetch(layerId), group.Spheres);
+                        peakIds.Add(layerId);
+
+                        var cores = BuildCoreSpheres(group.Spheres, StructureNaming.SphereCoreInsetMm);
+                        if (cores.Count == 0)
+                            continue;
+                        string coreIdGroup = StructureNaming.NextAvailable(StructureNaming.FormatPeakCoreId(g + 1), existing);
+                        AddTypedStructure(StructureNaming.DicomControl, coreIdGroup, transaction, existing, highRes);
+                        Structure coreStructure = Refetch(coreIdGroup);
+                        if (coreStructure != null)
+                            coreStructure.Color = Color.FromRgb(255, 69, 0);
+                        EnsureHighResolutionById(coreIdGroup, highRes);
+                        AddSphereContours(Refetch(coreIdGroup), cores);
+                        coreStructureIds.Add(coreIdGroup);
+                    }
+
+                    // Composite Lattice_Cores for core-focused PO (Grams undercoverage / LatticeHelper).
+                    if (coreStructureIds.Count > 0)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        Report(progress, "Creating composite Lattice_Cores...");
+                        string coresId = StructureNaming.NextAvailable(StructureNaming.CompositeCoresId, existing);
+                        AddTypedStructure(StructureNaming.DicomControl, coresId, transaction, existing, highRes);
+                        Structure coresComposite = Refetch(coresId);
+                        if (coresComposite != null)
+                            coresComposite.Color = Color.FromRgb(255, 99, 71);
+                        EnsureHighResolutionById(coresId, highRes);
+                        SegmentVolume coreUnion = null;
+                        for (int i = 0; i < coreStructureIds.Count; i++)
+                        {
+                            Structure corePart = Refetch(coreStructureIds[i]);
+                            if (corePart == null)
+                                continue;
+                            coreUnion = coreUnion == null ? corePart.SegmentVolume : coreUnion.Or(corePart.SegmentVolume);
+                        }
+                        if (coreUnion != null)
+                            AssignSegment(coresId, coreUnion);
+                    }
+                }
 
                 token.ThrowIfCancellationRequested();
                 Report(progress, "Creating composite Lattice_Peaks...");
@@ -548,7 +599,7 @@ namespace SFRThelper.Services
                     composite.Color = Colors.Red;
                 composite = EnsureHighResolutionById(peaksId, highRes);
 
-                if (createIndividuals && peakIds.Count > 0)
+                if ((createIndividuals || createCtSliceGroups) && peakIds.Count > 0)
                 {
                     SegmentVolume union = null;
                     for (int i = 0; i < peakIds.Count; i++)
@@ -585,6 +636,7 @@ namespace SFRThelper.Services
                 }
 
                 string penumbraId = null;
+                string penumbra2Id = null;
                 string coreId = null;
                 string ring01Id = null;
                 string ring13Id = null;
@@ -597,6 +649,11 @@ namespace SFRThelper.Services
                     if (dShell > 5.0) dShell = 5.0;
                     double ring1Mm = parameters.ConcentricRing1Mm > 0 ? parameters.ConcentricRing1Mm : 10.0;
                     double ring2Mm = parameters.ConcentricRing2Mm > ring1Mm ? parameters.ConcentricRing2Mm : ring1Mm + 20.0;
+                    double ringTargetGapMm = StructureNaming.RingTargetGapMm;
+                    double middleInnerMm = StructureNaming.MiddleShellInnerMm;
+                    double middleOuterMm = StructureNaming.MiddleShellOuterMm;
+                    if (middleOuterMm <= middleInnerMm)
+                        middleOuterMm = middleInnerMm + 5.0;
 
                     string bodyClipId = null;
                     Structure bodyClip = FindBodyStructure();
@@ -653,6 +710,28 @@ namespace SFRThelper.Services
                     }
 
                     token.ThrowIfCancellationRequested();
+                    // Grams z_MC: middle control shell 5–10 mm from Lattice_Peaks (PRO 2021).
+                    Report(progress, "Creating Peak_Penu2 = Grams z_MC (Peaks+10 mm) \\ (Peaks+5 mm) ∩ Target...");
+                    penumbra2Id = StructureNaming.NextAvailable(StructureNaming.PenumbraShell2Id, existing);
+                    AddTypedStructure(StructureNaming.DicomControl, penumbra2Id, transaction, existing, highRes);
+                    Structure penumbra2 = Refetch(penumbra2Id);
+                    if (penumbra2 != null)
+                        penumbra2.Color = Color.FromRgb(255, 99, 71);
+                    EnsureHighResolutionById(penumbra2Id, highRes);
+                    composite = Refetch(peaksId);
+                    target = Refetch(targetId);
+                    if (composite != null && target != null)
+                    {
+                        AssignSegment(penumbra2Id, composite.Margin(middleOuterMm));
+                        penumbra2 = Refetch(penumbra2Id);
+                        composite = Refetch(peaksId);
+                        AssignSegment(penumbra2Id, penumbra2.Sub(composite.Margin(middleInnerMm)));
+                        penumbra2 = Refetch(penumbra2Id);
+                        target = Refetch(targetId);
+                        AssignSegment(penumbra2Id, penumbra2.And(target.SegmentVolume));
+                    }
+
+                    token.ThrowIfCancellationRequested();
                     Report(progress, "Creating Valley_Core = Target \\ Peaks.Margin(+d)...");
                     coreId = StructureNaming.NextAvailable(StructureNaming.ValleyCoreId, existing);
                     AddTypedStructure(StructureNaming.DicomAvoidance, coreId, transaction, existing, highRes);
@@ -671,7 +750,7 @@ namespace SFRThelper.Services
                     }
 
                     token.ThrowIfCancellationRequested();
-                    Report(progress, "Creating Ring_SFRT rings clipped to EXTERNAL...");
+                    Report(progress, "Creating Ring_SFRT rings clipped to EXTERNAL (1 mm target gap)...");
                     ring01Id = StructureNaming.NextAvailable(StructureNaming.Ring01Id, existing);
                     AddTypedStructure(StructureNaming.DicomAvoidance, ring01Id, transaction, existing, highRes);
                     Structure ring01 = Refetch(ring01Id);
@@ -684,7 +763,8 @@ namespace SFRThelper.Services
                         AssignSegment(ring01Id, target.Margin(ring1Mm));
                         ring01 = Refetch(ring01Id);
                         target = Refetch(targetId);
-                        AssignSegment(ring01Id, ring01.Sub(target.SegmentVolume));
+                        // 1 mm gap from the target volume (inner edge starts at Target + 1 mm).
+                        AssignSegment(ring01Id, ring01.Sub(target.Margin(ringTargetGapMm)));
                     }
                     ClipToExternalById(ring01Id, bodyClipId);
 
@@ -713,31 +793,26 @@ namespace SFRThelper.Services
                     }
                 }
 
-                token.ThrowIfCancellationRequested();
-                Report(progress, "Creating POI_Peak_Center and POI_Valley_Center markers...");
-                string poiPeakId = StructureNaming.NextAvailable(StructureNaming.PoiPeakCenterId, existing);
-                AddTypedStructure(StructureNaming.DicomMarker, poiPeakId, transaction, existing, highRes);
-                Point3D peakPoi = included[0].Center;
-                AddSphereContours(Refetch(poiPeakId), new SphereModel(peakPoi, 1.0, 1) { Id = poiPeakId });
-
-                string poiValleyId = StructureNaming.NextAvailable(StructureNaming.PoiValleyCenterId, existing);
-                AddTypedStructure(StructureNaming.DicomMarker, poiValleyId, transaction, existing, highRes);
-                Point3D valleyPoi = FindValleyPoi(targetId, included);
-                AddSphereContours(Refetch(poiValleyId), new SphereModel(valleyPoi, 1.0, 1) { Id = poiValleyId });
-
                 transaction.Commit();
                 result.Success = true;
                 result.CreatedStructureIds = new List<string>(transaction.CreatedIds);
                 result.CompositePeaksId = peaksId;
                 result.ValleyId = valleyId;
                 result.PenumbraShellId = penumbraId;
+                result.PenumbraShell2Id = penumbra2Id;
                 result.ValleyCoreId = coreId;
                 result.Ring01Id = ring01Id;
                 result.Ring13Id = ring13Id;
-                result.PoiPeakCenterId = poiPeakId;
-                result.PoiValleyCenterId = poiValleyId;
-                result.Message = BuildCreationMessage(createIndividuals, peakIds.Count, peaksId, valleyId,
-                    penumbraId, coreId, ring01Id, ring13Id, poiPeakId, poiValleyId);
+                result.Message = BuildCreationMessage(
+                    createIndividuals || createCtSliceGroups,
+                    peakIds.Count,
+                    peaksId,
+                    valleyId,
+                    penumbraId,
+                    penumbra2Id,
+                    coreId,
+                    ring01Id,
+                    ring13Id);
                 return result;
             }
             catch (OperationCanceledException)
@@ -775,20 +850,32 @@ namespace SFRThelper.Services
 
                 LinacEnergyOption machineOpt = ResolveMachineOption(plan, parameters);
                 if (machineOpt == null || string.IsNullOrWhiteSpace(machineOpt.MachineId))
-                    return "External beam configuration not found. Select a commissioned linac/energy in Plan Automation, or add a treatment beam to the plan so machine parameters can be inherited.";
+                    return "External beam configuration not found for 10X-FFF. Select a commissioned 10X-FFF linac/energy in Plan Automation, or add a 10X-FFF treatment beam to the plan.";
 
-                VVector iso = ResolveIsocenter(plan);
+                if (!BeamMachineParser.IsTenXFff(machineOpt))
+                    return "Plan automation is limited to 10X-FFF. Selected configuration was "
+                        + machineOpt.Display + ".";
+
+                // Grams / automated lattice: isocenter at all_vertices (Lattice_Peaks).
+                VVector iso = ResolveLatticeIsocenter(plan);
+                int vertexCount = CountLatticeVertices();
+                int arcCount = RecommendArcCount(vertexCount);
 
                 string lastError = null;
-                if (TryAddVmatPair(plan, machineOpt, iso, out lastError))
+                int added;
+                if (TryAddVmatArcs(plan, machineOpt, iso, arcCount, out added, out lastError))
                 {
                     string jawNote = TryEnableJawTracking(plan);
-                    return "Added 2 coplanar VMAT arcs (collimators 15° / 75°, technique ARC, default MLC)"
-                        + (string.IsNullOrEmpty(jawNote) ? " and enabled jaw tracking." : ". " + jawNote);
+                    return "Added " + added.ToString(CultureInfo.InvariantCulture)
+                        + " coplanar VMAT arcs (10X-FFF @"
+                        + StructureNaming.TenXFffDoseRate.ToString(CultureInfo.InvariantCulture)
+                        + " MU/min, Grams ±5°/±10°/±15° collimators, "
+                        + vertexCount.ToString(CultureInfo.InvariantCulture) + " vertices)"
+                        + (string.IsNullOrEmpty(jawNote) ? "; jaw tracking enabled." : ". " + jawNote);
                 }
 
-                return "VMAT arc setup failed: External beam configuration not found ("
-                    + machineOpt.Display + "). " + (lastError ?? string.Empty);
+                return "VMAT arc setup failed for " + machineOpt.Display + ". "
+                    + (lastError ?? "External beam configuration was not accepted by Eclipse.");
             }
             catch (Exception ex)
             {
@@ -863,7 +950,20 @@ namespace SFRThelper.Services
                     }
                 }
 
+                PoObjectiveProfile profile = OptimizationObjectivePresets.Find(parameters.PoObjectivePreset);
                 IList<PoPointObjective> specs = OptimizationObjectivePresets.Build(parameters, rxGy);
+
+                // Grams: Lower on each individual Peak_xx when present (not only Lattice_Peaks).
+                if (profile.PreferIndividualPeakObjectives)
+                {
+                    foreach (string peakId in SnapshotStructureIds())
+                    {
+                        if (!StructureNaming.IsIndividualPeakId(peakId))
+                            continue;
+                        specs.Add(OptimizationObjectivePresets.BuildIndividualPeakObjective(profile, rxGy, peakId));
+                    }
+                }
+
                 int added = 0;
                 bool valleyCoreAdded = false;
                 foreach (var spec in specs)
@@ -981,6 +1081,9 @@ namespace SFRThelper.Services
                                 continue;
                             LinacEnergyOption opt = FromBeam(beam, ext.Id);
                             if (opt == null || seen.Contains(opt.Key))
+                                continue;
+                            // Plan automation is restricted to 10X-FFF only.
+                            if (!BeamMachineParser.IsTenXFff(opt))
                                 continue;
                             seen.Add(opt.Key);
                             list.Add(opt);
@@ -1205,17 +1308,14 @@ namespace SFRThelper.Services
             FillDeliveryGuards(item, ctx);
             ctx.Gradients = SamplePeakPairGradients(item, ctx.IndividualPeaks);
 
-            if (parameters != null && parameters.HasOar1)
+            if (parameters != null)
             {
-                var oar = GetStructure(parameters.Oar1StructureId);
-                if (oar != null)
-                    ctx.Oars.Add(Snapshot(item, oar, planInfo.PrescriptionDoseGy));
-            }
-            if (parameters != null && parameters.HasOar2)
-            {
-                var oar = GetStructure(parameters.Oar2StructureId);
-                if (oar != null)
-                    ctx.Oars.Add(Snapshot(item, oar, planInfo.PrescriptionDoseGy));
+                foreach (AvoidanceOarEntry oarEntry in parameters.SelectedAvoidanceOars)
+                {
+                    var oar = GetStructure(oarEntry.StructureId);
+                    if (oar != null)
+                        ctx.Oars.Add(Snapshot(item, oar, planInfo.PrescriptionDoseGy));
+                }
             }
 
             if (ctx.Peaks == null)
@@ -1634,62 +1734,16 @@ namespace SFRThelper.Services
             return list;
         }
 
-        private Point3D FindValleyPoi(string targetId, IReadOnlyList<SphereModel> peaks)
-        {
-            Structure target = Refetch(targetId);
-            if (target == null)
-                return peaks != null && peaks.Count > 0 ? peaks[0].Center : new Point3D(0, 0, 0);
-            Point3D best = ToPoint(target.CenterPoint);
-            double bestMin = -1;
-            BoundingBox3D bounds = ToBounds(target);
-            double step = 4.0;
-            for (double z = bounds.MinZ; z <= bounds.MaxZ + 1e-6; z += step)
-            {
-                for (double y = bounds.MinY; y <= bounds.MaxY + 1e-6; y += step)
-                {
-                    for (double x = bounds.MinX; x <= bounds.MaxX + 1e-6; x += step)
-                    {
-                        try
-                        {
-                            if (!target.IsPointInsideSegment(new VVector(x, y, z)))
-                                continue;
-                        }
-                        catch
-                        {
-                            continue;
-                        }
-                        double minD = double.MaxValue;
-                        if (peaks != null)
-                        {
-                            for (int i = 0; i < peaks.Count; i++)
-                            {
-                                double d = peaks[i].Center.DistanceTo(new Point3D(x, y, z));
-                                if (d < minD)
-                                    minD = d;
-                            }
-                        }
-                        if (minD > bestMin)
-                        {
-                            bestMin = minD;
-                            best = new Point3D(x, y, z);
-                        }
-                    }
-                }
-            }
-            return best;
-        }
-
         private static string BuildCreationMessage(
             bool createIndividuals,
             int peakCount,
             string peaksId,
             string valleyId,
             string penumbraId,
+            string penumbra2Id,
             string valleyCoreId,
             string ring01Id,
-            string ring13Id,
-            string poiPeakId,
-            string poiValleyId)
+            string ring13Id)
         {
             var parts = new List<string>();
             if (createIndividuals)
@@ -1697,11 +1751,10 @@ namespace SFRThelper.Services
             AppendId(parts, peaksId);
             AppendId(parts, valleyId);
             AppendId(parts, penumbraId);
+            AppendId(parts, penumbra2Id);
             AppendId(parts, valleyCoreId);
             AppendId(parts, ring01Id);
             AppendId(parts, ring13Id);
-            AppendId(parts, poiPeakId);
-            AppendId(parts, poiValleyId);
 
             if (parts.Count == 0)
                 return "Created lattice structures.";
@@ -1729,27 +1782,36 @@ namespace SFRThelper.Services
 
         private LinacEnergyOption ResolveMachineOption(ExternalPlanSetup plan, SFRTParameters parameters)
         {
-            Beam template = FirstTreatmentBeam(plan);
-            if (template != null)
-                return FromBeam(template, plan.Id);
-
             if (parameters != null && !string.IsNullOrWhiteSpace(parameters.SelectedMachineId)
                 && !string.IsNullOrWhiteSpace(parameters.SelectedEnergyMode)
                 && parameters.SelectedDoseRate > 0)
             {
-                return new LinacEnergyOption
+                var selected = new LinacEnergyOption
                 {
                     MachineId = parameters.SelectedMachineId,
                     EnergyModeId = parameters.SelectedEnergyMode,
-                    EnergyModeDisplayName = parameters.SelectedEnergyMode,
+                    EnergyModeDisplayName = string.IsNullOrEmpty(parameters.SelectedPrimaryFluenceMode)
+                        ? parameters.SelectedEnergyMode
+                        : parameters.SelectedEnergyMode + "-" + parameters.SelectedPrimaryFluenceMode,
                     PrimaryFluenceMode = parameters.SelectedPrimaryFluenceMode,
                     DoseRate = parameters.SelectedDoseRate,
                     Key = BeamMachineParser.OptionKey(
                         parameters.SelectedMachineId, parameters.SelectedEnergyMode,
                         parameters.SelectedDoseRate, parameters.SelectedPrimaryFluenceMode)
                 };
+                if (BeamMachineParser.IsTenXFff(selected))
+                    return selected;
             }
 
+            Beam template = FirstTreatmentBeam(plan);
+            if (template != null)
+            {
+                LinacEnergyOption fromBeam = FromBeam(template, plan.Id);
+                if (BeamMachineParser.IsTenXFff(fromBeam))
+                    return fromBeam;
+            }
+
+            // Prefer any commissioned 10X-FFF option discovered on the patient.
             IReadOnlyList<LinacEnergyOption> options = GetLinacEnergyOptions();
             if (options.Count > 0)
                 return options[0];
@@ -1806,40 +1868,195 @@ namespace SFRThelper.Services
             return new VVector(0, 0, 0);
         }
 
-        private bool TryAddVmatPair(ExternalPlanSetup plan, LinacEnergyOption opt, VVector iso, out string error)
+        /// <summary>
+        /// Grams / automated lattice: place isocenter at Lattice_Peaks (all_vertices) center.
+        /// </summary>
+        private VVector ResolveLatticeIsocenter(ExternalPlanSetup plan)
         {
-            error = null;
-            var attempts = new List<ExternalBeamMachineParameters>();
-            attempts.Add(new ExternalBeamMachineParameters(opt.MachineId, opt.EnergyModeDisplayName ?? opt.EnergyModeId, opt.DoseRate, "ARC", null));
-            if (!string.IsNullOrEmpty(opt.EnergyModeId)
-                && !string.Equals(opt.EnergyModeId, opt.EnergyModeDisplayName, StringComparison.OrdinalIgnoreCase))
+            Structure peaks = FindByIdOrPrefix(StructureNaming.CompositePeaksId, "Lattice_Pe");
+            if (peaks != null && !peaks.IsEmpty)
+                return peaks.CenterPoint;
+            return ResolveIsocenter(plan);
+        }
+
+        private int CountLatticeVertices()
+        {
+            int count = 0;
+            foreach (string id in SnapshotStructureIds())
             {
-                attempts.Add(new ExternalBeamMachineParameters(opt.MachineId, opt.EnergyModeId, opt.DoseRate, "ARC", opt.PrimaryFluenceMode));
+                if (StructureNaming.IsIndividualPeakId(id))
+                    count++;
             }
-            else if (!string.IsNullOrEmpty(opt.PrimaryFluenceMode))
+            if (count > 0)
+                return count;
+
+            // PeakLayer_* groups or composite-only: estimate from Lattice_Peaks volume / sphere volume is unreliable;
+            // use layer count as a lower bound on occupied planes.
+            foreach (string id in SnapshotStructureIds())
             {
-                attempts.Add(new ExternalBeamMachineParameters(opt.MachineId, opt.EnergyModeId, opt.DoseRate, "ARC", opt.PrimaryFluenceMode));
+                if (id != null && id.StartsWith("PeakLayer", StringComparison.OrdinalIgnoreCase))
+                    count++;
+            }
+            return Math.Max(count, 1);
+        }
+
+        /// <summary>
+        /// Automated lattice (Med Phys 2023): start with 2 arcs; add one arc each time
+        /// vertices exceed 10, 25, 75, and 125.
+        /// </summary>
+        private static int RecommendArcCount(int vertexCount)
+        {
+            int arcs = 2;
+            if (vertexCount > 10) arcs++;
+            if (vertexCount > 25) arcs++;
+            if (vertexCount > 75) arcs++;
+            if (vertexCount > 125) arcs++;
+            return arcs;
+        }
+
+        private bool TryAddVmatArcs(
+            ExternalPlanSetup plan,
+            LinacEnergyOption opt,
+            VVector iso,
+            int arcCount,
+            out int added,
+            out string error)
+        {
+            added = 0;
+            error = null;
+            string energyId = opt.EnergyModeId;
+            string fluence = opt.PrimaryFluenceMode;
+            string display = opt.EnergyModeDisplayName;
+            if (string.IsNullOrEmpty(fluence) && !string.IsNullOrEmpty(display))
+            {
+                string splitEnergy;
+                string splitFluence;
+                BeamMachineParser.SplitEnergyMode(display, out splitEnergy, out splitFluence);
+                if (!string.IsNullOrEmpty(splitEnergy))
+                    energyId = splitEnergy;
+                if (!string.IsNullOrEmpty(splitFluence))
+                    fluence = splitFluence;
+            }
+            if (string.IsNullOrEmpty(energyId))
+                energyId = display ?? "10X";
+
+            // Prefer clinical 2400 MU/min for 10X-FFF, then the selected commissioned rate.
+            var doseRates = new List<int>();
+            doseRates.Add(StructureNaming.TenXFffDoseRate);
+            if (opt.DoseRate > 0 && opt.DoseRate != StructureNaming.TenXFffDoseRate)
+                doseRates.Add(opt.DoseRate);
+
+            var attempts = new List<ExternalBeamMachineParameters>();
+            foreach (int rate in doseRates)
+            {
+                if (!string.IsNullOrEmpty(fluence))
+                    attempts.Add(new ExternalBeamMachineParameters(opt.MachineId, energyId, rate, "ARC", fluence));
+                if (!string.IsNullOrEmpty(display)
+                    && !string.Equals(display, energyId, StringComparison.OrdinalIgnoreCase))
+                {
+                    attempts.Add(new ExternalBeamMachineParameters(opt.MachineId, display, rate, "ARC", null));
+                }
+                attempts.Add(new ExternalBeamMachineParameters(opt.MachineId, energyId, rate, "ARC", null));
             }
 
-            var weights = new List<double>(178);
-            for (int i = 0; i < 178; i++)
-                weights.Add(1.0);
+            // Cumulative meterset weights must start at 0 and end at 1.
+            const int controlPointCount = 178;
+            var weights = new List<double>(controlPointCount);
+            for (int i = 0; i < controlPointCount; i++)
+                weights.Add(controlPointCount == 1 ? 0.0 : (double)i / (controlPointCount - 1));
+
+            // Grams / automated lattice collimators: ±5°, then ±10°, ±15° for extra arcs.
+            double[] collimators = { 5.0, 355.0, 10.0, 350.0, 15.0, 345.0 };
+            if (arcCount < 2)
+                arcCount = 2;
+            if (arcCount > collimators.Length)
+                arcCount = collimators.Length;
 
             foreach (var machine in attempts)
             {
                 try
                 {
-                    plan.AddVMATBeam(machine, weights, 15.0, 181.0, 179.0, GantryDirection.Clockwise, 0.0, iso);
-                    plan.AddVMATBeam(machine, weights, 75.0, 179.0, 181.0, GantryDirection.CounterClockwise, 0.0, iso);
+                    for (int a = 0; a < arcCount; a++)
+                    {
+                        double coll = collimators[a];
+                        bool clockwise = (a % 2) == 0;
+                        if (clockwise)
+                            plan.AddVMATBeam(machine, weights, coll, 181.0, 179.0, GantryDirection.Clockwise, 0.0, iso);
+                        else
+                            plan.AddVMATBeam(machine, weights, coll, 179.0, 181.0, GantryDirection.CounterClockwise, 0.0, iso);
+                    }
+                    added = arcCount;
                     error = null;
                     return true;
                 }
                 catch (Exception ex)
                 {
                     error = ex.Message;
+                    added = 0;
                 }
             }
             return false;
+        }
+
+        /// <summary>
+        /// LatticeHelper occupied-plane grouping: bin by SI lattice pitch when available,
+        /// otherwise by nearest CT slice index (spheres that share CT slices).
+        /// </summary>
+        private List<CtSliceSphereGroup> GroupSpheresByLatticePlane(
+            IReadOnlyList<SphereModel> spheres,
+            SFRTParameters parameters)
+        {
+            var groups = new Dictionary<int, CtSliceSphereGroup>();
+            ImageGeometryDto image = GetImageGeometry();
+            double pitch = parameters != null ? parameters.EffectiveSiSpacingMm : 0.0;
+            foreach (var sphere in spheres)
+            {
+                int plane;
+                if (pitch > 1e-6)
+                    plane = (int)Math.Round(sphere.Center.Z / pitch);
+                else if (image != null)
+                    plane = image.GetNearestSliceIndex(sphere.Center.Z);
+                else
+                    plane = 0;
+
+                CtSliceSphereGroup group;
+                if (!groups.TryGetValue(plane, out group))
+                {
+                    group = new CtSliceSphereGroup { SliceIndex = plane };
+                    groups[plane] = group;
+                }
+                group.Spheres.Add(sphere);
+            }
+            return groups.Values.OrderBy(g => g.SliceIndex).ToList();
+        }
+
+        private static List<SphereModel> BuildCoreSpheres(IReadOnlyList<SphereModel> spheres, double insetMm)
+        {
+            var cores = new List<SphereModel>();
+            if (spheres == null)
+                return cores;
+            for (int i = 0; i < spheres.Count; i++)
+            {
+                double radius = spheres[i].Radius - insetMm;
+                if (radius < 0.5)
+                    continue;
+                cores.Add(new SphereModel(spheres[i].Center, radius, i + 1)
+                {
+                    Id = (spheres[i].Id ?? "Peak") + "_Core"
+                });
+            }
+            return cores;
+        }
+
+        private sealed class CtSliceSphereGroup
+        {
+            public int SliceIndex { get; set; }
+            public List<SphereModel> Spheres { get; private set; }
+
+            public CtSliceSphereGroup()
+            {
+                Spheres = new List<SphereModel>();
+            }
         }
 
         private static string TryEnableJawTracking(ExternalPlanSetup plan)

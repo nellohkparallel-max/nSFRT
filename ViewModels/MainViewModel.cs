@@ -93,7 +93,8 @@ namespace SFRThelper.ViewModels
             GenerationModeOptions = new[]
             {
                 new GenerationModeOption { Value = SphereGenerationMode.IndividualAndComposite, Display = "Individual Peak_xx + Lattice_Peaks" },
-                new GenerationModeOption { Value = SphereGenerationMode.CompositeOnly, Display = "Composite Lattice_Peaks only" }
+                new GenerationModeOption { Value = SphereGenerationMode.CompositeOnly, Display = "Composite Lattice_Peaks only" },
+                new GenerationModeOption { Value = SphereGenerationMode.CtSliceGroupedWithCores, Display = "Lattice-plane groups + −1 mm cores (LatticeHelper)" }
             };
             ProtocolOptions = SFRTProtocolPresets.All.Select(p => new ProtocolOption
             {
@@ -129,6 +130,8 @@ namespace SFRThelper.ViewModels
             SeedPoObjectivesCommand = SeedObjectivesCommand;
             SetupVmatArcsCommand = new AsyncRelayCommand(SetupVmatArcsAsync, () => CanAutomate);
             ExportQaReportCommand = new RelayCommand(ExportQaReport, () => CanExportQa);
+            AddAvoidanceOarCommand = new RelayCommand(AddAvoidanceOar, () => IsIdle);
+            RemoveAvoidanceOarCommand = new RelayCommand<AvoidanceOarEntry>(RemoveAvoidanceOar, _ => IsIdle);
 
             Parameters.PropertyChanged += Parameters_PropertyChanged;
             Parameters.ErrorsChanged += Parameters_ErrorsChanged;
@@ -461,6 +464,31 @@ namespace SFRThelper.ViewModels
         public ICommand SeedPoObjectivesCommand { get; private set; }
         public ICommand SetupVmatArcsCommand { get; private set; }
         public ICommand ExportQaReportCommand { get; private set; }
+        public ICommand AddAvoidanceOarCommand { get; private set; }
+        public ICommand RemoveAvoidanceOarCommand { get; private set; }
+
+        private void AddAvoidanceOar()
+        {
+            Parameters.AddAvoidanceOar();
+            InvalidateGeometry();
+            RefreshLocalFeasibility();
+        }
+
+        private void RemoveAvoidanceOar(AvoidanceOarEntry entry)
+        {
+            if (entry == null)
+                return;
+            // Keep at least one slot so the UI always has an editable row.
+            if (Parameters.AvoidanceOars.Count <= 1)
+            {
+                entry.StructureId = StructureListItem.NoneId;
+                entry.ClearanceMm = SFRTParameters.DefaultOarClearanceMm;
+                return;
+            }
+            Parameters.RemoveAvoidanceOar(entry);
+            InvalidateGeometry();
+            RefreshLocalFeasibility();
+        }
 
         private void LoadCatalogs()
         {
@@ -546,6 +574,7 @@ namespace SFRThelper.ViewModels
 
             if (e.PropertyName == nameof(SFRTParameters.Oar1StructureId)
                 || e.PropertyName == nameof(SFRTParameters.Oar2StructureId)
+                || e.PropertyName == nameof(SFRTParameters.SelectedAvoidanceOars)
                 || e.PropertyName == nameof(SFRTParameters.SphereRadiusMm)
                 || e.PropertyName == nameof(SFRTParameters.SphereDiameterMm)
                 || e.PropertyName == nameof(SFRTParameters.TargetClearanceMm)
@@ -1065,15 +1094,17 @@ namespace SFRThelper.ViewModels
 
         private Point MmToCanvas(double xMm, double yMm)
         {
+            // DICOM LPS: +Y is posterior. Axial clinical view (feet→head) puts anterior at top,
+            // so patient Y increases downward on the canvas — do not invert Y.
             double x = (xMm - _viewMinX) * _viewScale;
-            double y = _viewerHeight - ((yMm - _viewMinY) * _viewScale);
+            double y = (yMm - _viewMinY) * _viewScale;
             return new Point(x, y);
         }
 
         private Point CanvasToMm(Point canvasPoint)
         {
             double x = (canvasPoint.X / _viewScale) + _viewMinX;
-            double y = ((_viewerHeight - canvasPoint.Y) / _viewScale) + _viewMinY;
+            double y = (canvasPoint.Y / _viewScale) + _viewMinY;
             return new Point(x, y);
         }
 
