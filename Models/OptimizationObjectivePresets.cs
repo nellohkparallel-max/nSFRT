@@ -301,7 +301,7 @@ namespace SFRThelper.Models
                 Required = false
             });
 
-            // Grams z_MC role: second ring / Peak_Penu2 — Upper V0 at ~50% Rx.
+            // Grams z_MC: Peak_Penu2 shell 5–10 mm from peaks — Upper V0 at ~50% Rx.
             list.Add(new PoPointObjective
             {
                 Role = "Peak_Penumbra_2",

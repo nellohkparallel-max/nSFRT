@@ -334,7 +334,7 @@
                                     <CheckBox Content="Generate Tuning Structures (Penumbra Shell, Valley Core, Rings)"
                                               IsChecked="{Binding Parameters.GenerateTuningStructures}"
                                               IsEnabled="{Binding IsIdle}"
-                                              ToolTip="Peak_Penumbra, Peak_Penu2 (3 mm ring after 1 mm gap), Valley_Core, and External-clipped rings (Ring_SFRT_0-1cm starts 1 mm outside target)."/>
+                                              ToolTip="Peak_Penumbra (Grams z_IC 0–5 mm), Peak_Penu2 (Grams z_MC 5–10 mm), Valley_Core, and External-clipped rings (Ring_SFRT_0-1cm starts 1 mm outside target)."/>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="176"/>
@@ -533,7 +533,7 @@
                                 </WrapPanel>
                                 <TextBlock Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2"
                                            TextWrapping="Wrap" Margin="4,8,4,0" Foreground="#445"
-                                           Text="VMAT: 10X-FFF @2400; arc count scales with vertices (2 + extras above 10/25/75/125); collimators ±5°/±10°/±15°; meterset weights 0→1. PO: control shells (Peak_Penumbra / Peak_Penu2 / rings) at higher priority than peaks; VMAT Grid preset uses V50% peak Lower (Grams)."/>
+                                           Text="VMAT: coplanar only (no couch kick). 10X-FFF @2400; arc count scales with vertices; collimators ±5°/±10°/±15°; meterset weights 0→1. Default PO seed is Grams VmatGrid (Peak Lower V50%); control shells Peak_Penumbra / Peak_Penu2 (z_MC 5–10 mm) / rings at higher priority than peaks."/>
                             </Grid>
                         </GroupBox>
 
@@ -550,7 +550,7 @@
 
                         <GroupBox Header="Structure naming (TG-263 / 16-character Eclipse IDs)">
                             <TextBlock Margin="8" FontFamily="Consolas" TextWrapping="Wrap"
-                                       Text="Peak_01 … Peak_nn  or  PeakLayer_nn (LatticeHelper planes)&#x0a;PeakCore_nn / Lattice_Cores = peaks − 1 mm (core-focused PO)&#x0a;Lattice_Peaks = ∪ Peak_i  (VMAT isocenter)&#x0a;Lattice_Valley = Target \ Lattice_Peaks&#x0a;Peak_Penumbra ≈ Grams z_IC (Peaks + d_shell) \ Peaks ∩ Target&#x0a;Peak_Penu2 ≈ Grams z_MC (3 mm ring after 1 mm gap)&#x0a;Valley_Core = Target \ (Peaks + d_shell)&#x0a;Ring_SFRT_0-1cm = ((Target + r1) \ (Target + 1 mm)) ∩ External&#x0a;Ring_SFRT_1-3cm = ((Target + r2) \ (Target + r1)) ∩ External"/>
+                                       Text="Peak_01 … Peak_nn  or  PeakLayer_nn (LatticeHelper planes)&#x0a;PeakCore_nn / Lattice_Cores = peaks − 1 mm (core-focused PO)&#x0a;Lattice_Peaks = ∪ Peak_i  (VMAT isocenter)&#x0a;Lattice_Valley = Target \ Lattice_Peaks&#x0a;Peak_Penumbra = Grams z_IC (Peaks + 5 mm) \ Peaks ∩ Target&#x0a;Peak_Penu2 = Grams z_MC (Peaks + 10 mm) \ (Peaks + 5 mm) ∩ Target&#x0a;Valley_Core = Target \ (Peaks + d_shell)&#x0a;Ring_SFRT_0-1cm = ((Target + r1) \ (Target + 1 mm)) ∩ External&#x0a;Ring_SFRT_1-3cm = ((Target + r2) \ (Target + r1)) ∩ External&#x0a;Default PO seed: VmatGrid (Grams V50%)"/>
                         </GroupBox>
                     </StackPanel>
                 </ScrollViewer>

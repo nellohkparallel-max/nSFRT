@@ -17,7 +17,7 @@ namespace SFRThelper.Models
         public const string ValleyId = "Lattice_Valley";
         /// <summary>Eclipse 16-char ID for Peak_Penumbra_Shell (Grams z_IC / inner control).</summary>
         public const string PenumbraShellId = "Peak_Penumbra";
-        /// <summary>Second-level 3 mm peak penumbra ring after 1 mm gap (Grams z_MC role).</summary>
+        /// <summary>Grams z_MC middle control: Peaks.Margin(10 mm) \ Peaks.Margin(5 mm).</summary>
         public const string PenumbraShell2Id = "Peak_Penu2";
         public const string ValleyCoreId = "Valley_Core";
         public const string Ring01Id = "Ring_SFRT_0-1cm";
@@ -25,10 +25,10 @@ namespace SFRThelper.Models
         public const string TempValidId = "zzSFRTtmp";
         /// <summary>1 mm gap between target and Ring_SFRT_0-1cm inner edge.</summary>
         public const double RingTargetGapMm = 1.0;
-        /// <summary>Gap between first and second Peak_Penumbra rings.</summary>
-        public const double SecondPenumbraGapMm = 1.0;
-        /// <summary>Thickness of the second Peak_Penumbra ring.</summary>
-        public const double SecondPenumbraThicknessMm = 3.0;
+        /// <summary>Grams z_MC inner surface (0.5 cm from Lattice_Peaks).</summary>
+        public const double MiddleShellInnerMm = 5.0;
+        /// <summary>Grams z_MC outer surface (1.0 cm from Lattice_Peaks).</summary>
+        public const double MiddleShellOuterMm = 10.0;
         /// <summary>Inset applied when building sphere cores from CT-slice groups.</summary>
         public const double SphereCoreInsetMm = 1.0;
         /// <summary>Default Peak_Penumbra / z_IC thickness matching Grams 0.5 cm inner control.</summary>

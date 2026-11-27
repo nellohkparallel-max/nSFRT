@@ -51,7 +51,7 @@ namespace SFRThelper.Models
         private double _concentricRing2Mm = 30.0;
         private double _prescriptionDoseGy = 20.0;
         private int _fractionCount = 1;
-        private PoObjectivePreset _poObjectivePreset = PoObjectivePreset.UniversityOfMiami;
+        private PoObjectivePreset _poObjectivePreset = PoObjectivePreset.VmatGrid;
         private bool _autoEnableJawTracking = true;
         private bool _clearExistingObjectives = true;
         private double _valleyUpperPercentOfRx = 30.0;

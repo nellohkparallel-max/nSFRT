@@ -650,8 +650,10 @@ namespace SFRThelper.Services
                     double ring1Mm = parameters.ConcentricRing1Mm > 0 ? parameters.ConcentricRing1Mm : 10.0;
                     double ring2Mm = parameters.ConcentricRing2Mm > ring1Mm ? parameters.ConcentricRing2Mm : ring1Mm + 20.0;
                     double ringTargetGapMm = StructureNaming.RingTargetGapMm;
-                    double penumbra2GapMm = StructureNaming.SecondPenumbraGapMm;
-                    double penumbra2ThicknessMm = StructureNaming.SecondPenumbraThicknessMm;
+                    double middleInnerMm = StructureNaming.MiddleShellInnerMm;
+                    double middleOuterMm = StructureNaming.MiddleShellOuterMm;
+                    if (middleOuterMm <= middleInnerMm)
+                        middleOuterMm = middleInnerMm + 5.0;
 
                     string bodyClipId = null;
                     Structure bodyClip = FindBodyStructure();
@@ -708,7 +710,8 @@ namespace SFRThelper.Services
                     }
 
                     token.ThrowIfCancellationRequested();
-                    Report(progress, "Creating Peak_Penu2 = 3 mm ring with 1 mm gap after Peak_Penumbra...");
+                    // Grams z_MC: middle control shell 5–10 mm from Lattice_Peaks (PRO 2021).
+                    Report(progress, "Creating Peak_Penu2 = Grams z_MC (Peaks+10 mm) \\ (Peaks+5 mm) ∩ Target...");
                     penumbra2Id = StructureNaming.NextAvailable(StructureNaming.PenumbraShell2Id, existing);
                     AddTypedStructure(StructureNaming.DicomControl, penumbra2Id, transaction, existing, highRes);
                     Structure penumbra2 = Refetch(penumbra2Id);
@@ -719,12 +722,10 @@ namespace SFRThelper.Services
                     target = Refetch(targetId);
                     if (composite != null && target != null)
                     {
-                        double inner = dShell + penumbra2GapMm;
-                        double outer = inner + penumbra2ThicknessMm;
-                        AssignSegment(penumbra2Id, composite.Margin(outer));
+                        AssignSegment(penumbra2Id, composite.Margin(middleOuterMm));
                         penumbra2 = Refetch(penumbra2Id);
                         composite = Refetch(peaksId);
-                        AssignSegment(penumbra2Id, penumbra2.Sub(composite.Margin(inner)));
+                        AssignSegment(penumbra2Id, penumbra2.Sub(composite.Margin(middleInnerMm)));
                         penumbra2 = Refetch(penumbra2Id);
                         target = Refetch(targetId);
                         AssignSegment(penumbra2Id, penumbra2.And(target.SegmentVolume));

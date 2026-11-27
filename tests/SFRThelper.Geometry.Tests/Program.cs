@@ -339,6 +339,8 @@ namespace SFRThelper.Geometry.Tests
         private static void TestPoObjectivePresets()
         {
             var p = new SFRTParameters { SelectedTargetId = "GTV" };
+            AssertTrue(p.PoObjectivePreset == PoObjectivePreset.VmatGrid, "default seed is Grams VmatGrid V50");
+            AssertNear(OptimizationObjectivePresets.Find(p.PoObjectivePreset).PeakVolumePercent, 50.0, 1e-9, "default V50");
             OptimizationObjectivePresets.Apply(p, PoObjectivePreset.UniversityOfMiami);
             AssertNear(p.ValleyUpperPercentOfRx, 30, 1e-9, "Miami valley 30");
             AssertNear(p.PenumbraUpperPercentOfRx, 95, 1e-9, "Miami z_IC 95");
@@ -569,8 +571,8 @@ namespace SFRThelper.Geometry.Tests
             AssertTrue(StructureNaming.CompositeCoresId == "Lattice_Cores", "Lattice_Cores id");
             AssertTrue(StructureNaming.CompositeCoresId.Length <= StructureNaming.MaxIdLength, "Lattice_Cores length");
             AssertNear(StructureNaming.RingTargetGapMm, 1.0, 1e-9, "ring target gap");
-            AssertNear(StructureNaming.SecondPenumbraGapMm, 1.0, 1e-9, "second penumbra gap");
-            AssertNear(StructureNaming.SecondPenumbraThicknessMm, 3.0, 1e-9, "second penumbra thickness");
+            AssertNear(StructureNaming.MiddleShellInnerMm, 5.0, 1e-9, "Grams z_MC inner 5 mm");
+            AssertNear(StructureNaming.MiddleShellOuterMm, 10.0, 1e-9, "Grams z_MC outer 10 mm");
             AssertNear(StructureNaming.SphereCoreInsetMm, 1.0, 1e-9, "sphere core inset");
             AssertNear(StructureNaming.DefaultInnerShellMm, 5.0, 1e-9, "Grams z_IC 5 mm");
             AssertTrue(StructureNaming.TenXFffDoseRate == 2400, "10X-FFF 2400");
